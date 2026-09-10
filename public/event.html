@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>比賽報名</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="nav">
+      <a class="brand" href="/"><span class="spin"></span> BEYX REG</a>
+      <a class="btn ghost" href="/status.html">我的報名</a>
+    </div>
+    <div id="page">載入中…</div>
+  </div>
+  <script type="module">
+    import { api, fmtDate, feeText, statusPill } from "/app.js";
+    const slug = new URLSearchParams(location.search).get("slug");
+    const page = document.getElementById("page");
+    if (!slug) { page.textContent = "缺少比賽 slug"; throw new Error("no slug"); }
+
+    const { event: ev, public_list } = await api("/api/events/" + encodeURIComponent(slug));
+    document.title = ev.title;
+
+    const cats = (ev.categories || []).map(c => `<option value="${c}">${c}</option>`).join("");
+    const listHtml = (public_list || []).length
+      ? `<div class="card"><h3>已報名</h3><div class="meta">${public_list.map(p =>
+          `${p.display_name}（${p.category || "—"}）${statusPill(p.status)}`
+        ).join("<br>")}</div></div>`
+      : "";
+
+    page.innerHTML = `
+      <h1>${ev.title}</h1>
+      <p class="lede">${ev.subtitle || ""}</p>
+      <p class="meta">${fmtDate(ev.event_date, ev.start_time, ev.end_time)} · ${ev.venue || ""} ${ev.address || ""}</p>
+      <p class="meta">報名費 ${feeText(ev)} · 名額 ${ev.counts?.taken || 0}/${ev.capacity} · 待確認 ${ev.counts?.pending || 0}</p>
+      <div class="card"><pre style="white-space:pre-wrap;font:inherit;margin:0">${ev.description || ""}</pre>
+        ${ev.rules ? `<h3>規則</h3><pre style="white-space:pre-wrap;font:inherit;margin:0">${ev.rules}</pre>` : ""}
+      </div>
+      <div class="notice" style="margin:16px 0">提交後唔會即時見到付款資料。主辦確認報名之後，用「我的報名」同你嘅 Token 查詢。</div>
+      ${ev.registration_open ? `
+      <form class="card" id="form">
+        <h3>報名</h3>
+        <label>Belader 名稱（公開顯示）<input name="display_name" required maxlength="40" /></label>
+        <div class="row2">
+          <label>真實姓名（只限主辦睇）<input name="real_name" maxlength="40" /></label>
+          <label>WhatsApp<input name="whatsapp" required placeholder="9123 4567" /></label>
+        </div>
+        <label>組別
+          <select name="category">${cats}</select>
+        </label>
+        <label>備註<input name="notes" maxlength="300" placeholder="可選：年齡、特殊需要" /></label>
+        <label class="hp">網站<input name="website" tabindex="-1" autocomplete="off" /></label>
+        <button class="btn" type="submit">提交報名</button>
+        <p id="msg" class="lede"></p>
+      </form>` : `<div class="card">呢場比賽已截止報名。</div>`}
+      ${listHtml}
+    `;
+
+    const form = document.getElementById("form");
+    if (form) form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const msg = document.getElementById("msg");
+      msg.textContent = "提交中…";
+      try {
+        const data = await api("/api/register", {
+          method: "POST",
+          body: {
+            slug,
+            display_name: fd.get("display_name"),
+            real_name: fd.get("real_name"),
+            whatsapp: fd.get("whatsapp"),
+            category: fd.get("category"),
+            notes: fd.get("notes"),
+            website: fd.get("website"),
+          },
+        });
+        localStorage.setItem("beyx_last_token", data.token);
+        location.href = "/status.html?token=" + encodeURIComponent(data.token);
+      } catch (err) {
+        msg.textContent = err.message;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Beyblade 比賽報名</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="nav">
+      <a class="brand" href="/"><span class="spin"></span> BEYX REG</a>
+      <div>
+        <a class="btn ghost" href="/status.html">我的報名</a>
+        <a class="btn ghost" href="/admin.html">主辦後台</a>
+      </div>
+    </div>
+    <h1>陀螺比賽報名</h1>
+    <p class="lede">揀一場比賽報名。提交後會進入待確認；主辦確認之後，先會喺「我的報名」顯示付款方式。</p>
+    <div id="list" class="grid"></div>
+    <footer>可重用比賽系統 · 同一套後台開下一場即可</footer>
+  </div>
+  <script type="module">
+    import { api, fmtDate, feeText, statusPill } from "/app.js";
+    const box = document.getElementById("list");
+    try {
+      const { events } = await api("/api/events");
+      if (!events.length) {
+        box.innerHTML = `<div class="card">暫時未有公開比賽。主辦可到 <a href="/admin.html">後台</a> 開新場。</div>`;
+      } else {
+        box.innerHTML = events.map(ev => {
+          const taken = ev.counts?.taken || 0;
+          const open = ev.registration_open;
+          return `<article class="card">
+            <div class="meta"><span class="pill">${open ? "接受報名" : "已截止"}</span><span>${feeText(ev)}</span></div>
+            <h3>${ev.title}</h3>
+            <p class="lede">${ev.subtitle || ""}</p>
+            <p class="meta">${fmtDate(ev.event_date, ev.start_time, ev.end_time)} · ${ev.venue || "地點待公布"}</p>
+            <p class="meta">已確認 ${taken} / ${ev.capacity} · 待確認 ${ev.counts?.pending || 0}</p>
+            <p><a class="btn" href="/event.html?slug=${encodeURIComponent(ev.slug)}">查看／報名</a></p>
+          </article>`;
+        }).join("");
+      }
+    } catch (e) {
+      box.innerHTML = `<div class="card">未能載入比賽：${e.message}<br>如果係第一次跑，請先執行 schema 同 seed。</div>`;
+    }
+  </script>
+</body>
+</html>

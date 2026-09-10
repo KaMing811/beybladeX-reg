@@ -1,0 +1,96 @@
+:root {
+  --bg: #07070c;
+  --bg2: #101018;
+  --card: #16161f;
+  --line: #2a2a38;
+  --text: #f4f1ea;
+  --muted: #9a96aa;
+  --accent: #ff6a00;
+  --accent2: #ffd000;
+  --ok: #3ee0a2;
+  --warn: #ffb020;
+  --bad: #ff5a6a;
+  --info: #6aa8ff;
+  --radius: 18px;
+  --shadow: 0 20px 50px rgba(0,0,0,.35);
+  --font: "Segoe UI", "Noto Sans TC", "PingFang HK", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(900px 400px at 10% -10%, rgba(255,106,0,.18), transparent 50%),
+    radial-gradient(700px 360px at 100% 0%, rgba(255,208,0,.08), transparent 45%),
+    var(--bg);
+}
+a { color: var(--accent2); text-decoration: none; }
+.wrap { width: min(1100px, calc(100% - 32px)); margin: 0 auto; padding: 24px 0 80px; }
+.nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 0 28px; gap: 12px;
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .08em; }
+.spin {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: conic-gradient(from 40deg, var(--accent), var(--accent2), #fff3, var(--accent));
+  box-shadow: 0 0 18px rgba(255,106,0,.6);
+  animation: spin 4s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.nav a.btn, .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 0; cursor: pointer; font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), #ff3b00);
+  color: #fff; border-radius: 999px; padding: 10px 16px;
+}
+.btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+.btn.ok { background: #147a55; }
+.btn.warn { background: #8a5a00; }
+.btn.bad { background: #8a2030; }
+.btn.small { padding: 7px 12px; font-size: 13px; }
+h1 { font-size: clamp(28px, 5vw, 48px); margin: 0 0 8px; line-height: 1.1; }
+.lede { color: var(--muted); font-size: 16px; max-width: 640px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 28px; }
+.card {
+  background: linear-gradient(180deg, #1b1b26, #12121a);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 18px; box-shadow: var(--shadow);
+}
+.card h2, .card h3 { margin: 0 0 8px; }
+.meta { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.pill {
+  display: inline-block; padding: 3px 8px; border-radius: 999px;
+  background: #2a2118; color: var(--accent2); font-size: 12px; font-weight: 700;
+}
+.pill.pending { background: #3a2a12; color: var(--warn); }
+.pill.confirmed { background: #163428; color: var(--ok); }
+.pill.paid { background: #10283a; color: var(--info); }
+.pill.waitlist { background: #2a2438; color: #c9b8ff; }
+.pill.rejected, .pill.cancelled { background: #3a151b; color: var(--bad); }
+form { display: grid; gap: 12px; }
+label { font-size: 13px; color: var(--muted); display: grid; gap: 6px; }
+input, select, textarea {
+  width: 100%; background: #0c0c12; color: var(--text);
+  border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; font: inherit;
+}
+textarea { min-height: 90px; resize: vertical; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.hp { position: absolute; left: -9999px; opacity: 0; }
+.notice {
+  padding: 14px 16px; border-radius: 14px; background: #1c1a12;
+  border: 1px solid #3a3018; color: #ffe7b0;
+}
+.pay {
+  padding: 16px; border-radius: 16px;
+  background: linear-gradient(180deg, #24180c, #16110c);
+  border: 1px solid #5a3a12;
+}
+.pay code { color: var(--accent2); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.hidden { display: none !important; }
+.token { font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+footer { margin-top: 40px; color: var(--muted); font-size: 13px; }
+@media (max-width: 700px) { .row2 { grid-template-columns: 1fr; } }

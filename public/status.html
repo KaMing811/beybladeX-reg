@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>我的報名</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="nav">
+      <a class="brand" href="/"><span class="spin"></span> BEYX REG</a>
+      <a class="btn ghost" href="/">返主頁</a>
+    </div>
+    <h1>我的報名</h1>
+    <form class="card" id="lookup">
+      <label>報名 Token
+        <input id="token" name="token" class="token" placeholder="報名成功後會獲得一組 Token" />
+      </label>
+      <button class="btn" type="submit">查詢</button>
+    </form>
+    <div id="out"></div>
+  </div>
+  <script type="module">
+    import { api, statusPill, feeText } from "/app.js";
+    const params = new URLSearchParams(location.search);
+    const saved = localStorage.getItem("beyx_last_token") || "";
+    const input = document.getElementById("token");
+    input.value = params.get("token") || saved;
+
+    async function load(token) {
+      const out = document.getElementById("out");
+      if (!token) { out.innerHTML = ""; return; }
+      try {
+        const { registration: r } = await api("/api/status?token=" + encodeURIComponent(token));
+        localStorage.setItem("beyx_last_token", token);
+        const pay = r.payment;
+        const payHtml = pay ? `
+          <div class="pay">
+            <h3>付款方式（主辦已確認先顯示）</h3>
+            <p>金額：<strong>${feeText(pay)}</strong></p>
+            ${pay.payme_id ? `<p>PayMe：<code>${pay.payme_id}</code></p>` : ""}
+            ${pay.payme_link ? `<p><a class="btn" href="${pay.payme_link}" target="_blank" rel="noopener">打開 PayMe</a></p>` : ""}
+            ${pay.fps_id ? `<p>FPS：<code>${pay.fps_id}</code> ${pay.fps_name || ""}</p>` : ""}
+            <p>${pay.payment_note || ""}</p>
+            <p class="lede">轉帳後請用 WhatsApp 回覆主辦，並可將最後 4 位／時間話俾主辦知。</p>
+          </div>` : `<div class="notice">付款資料尚未開放。而家狀態：${statusPill(r.status)}。請等主辦確認。</div>`;
+
+        out.innerHTML = `
+          <div class="card" style="margin-top:16px">
+            <p>${statusPill(r.status)}</p>
+            <h2>${r.event.title}</h2>
+            <p>${r.display_name} · ${r.category || ""}</p>
+            <p class="token">Token：${r.token}</p>
+            ${r.admin_note ? `<p>主辦備註：${r.admin_note}</p>` : ""}
+            ${payHtml}
+          </div>`;
+      } catch (e) {
+        out.innerHTML = `<div class="card" style="margin-top:16px">${e.message}</div>`;
+      }
+    }
+
+    document.getElementById("lookup").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const token = input.value.trim();
+      history.replaceState(null, "", "/status.html?token=" + encodeURIComponent(token));
+      load(token);
+    });
+    if (input.value) load(input.value.trim());
+  </script>
+</body>
+</html>

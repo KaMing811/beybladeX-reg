@@ -1,0 +1,16 @@
+{
+  "name": "beyblade-reg",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Reusable Beyblade tournament registration (Cloudflare Pages + D1)",
+  "scripts": {
+    "dev": "wrangler pages dev public --d1=DB=beyblade-reg --persist-to=.wrangler/state",
+    "db:local": "wrangler d1 execute beyblade-reg --local --file=schema/schema.sql && wrangler d1 execute beyblade-reg --local --file=schema/seed.sql",
+    "db:remote": "wrangler d1 execute beyblade-reg --remote --file=schema/schema.sql",
+    "db:seed": "wrangler d1 execute beyblade-reg --remote --file=schema/seed.sql",
+    "deploy": "wrangler pages deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.34.0"
+  }
+}

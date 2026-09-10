@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>主辦後台</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="nav">
+      <a class="brand" href="/"><span class="spin"></span> BEYX REG</a>
+      <div>
+        <a class="btn ghost" href="/">公開站</a>
+        <button class="btn ghost" id="logout" type="button">登出</button>
+      </div>
+    </div>
+    <h1>主辦後台</h1>
+    <p class="lede">確認報名之後，玩家先可以喺「我的報名」見到 PayMe / FPS。確認後可複製 WhatsApp 訊息。</p>
+
+    <form id="login" class="card">
+      <label>Admin 密碼<input type="password" name="password" required /></label>
+      <button class="btn" type="submit">登入</button>
+      <p id="loginMsg" class="lede"></p>
+    </form>
+
+    <div id="app" class="hidden">
+      <div class="toolbar">
+        <button class="btn" id="newEvent" type="button">開新比賽</button>
+        <select id="eventFilter"></select>
+        <select id="statusFilter">
+          <option value="">全部狀態</option>
+          <option value="pending">待確認</option>
+          <option value="confirmed">已確認待付款</option>
+          <option value="paid">已付款</option>
+          <option value="waitlist">候補</option>
+          <option value="rejected">未獲接納</option>
+        </select>
+        <button class="btn ghost" id="reload" type="button">重新整理</button>
+      </div>
+      <div id="eventEditor" class="card hidden"></div>
+      <div class="card" style="overflow:auto">
+        <h3>報名名單</h3>
+        <div id="regs"></div>
+      </div>
+    </div>
+  </div>
+  <script type="module">
+    import { api, statusPill, feeText } from "/app.js";
+
+    const loginForm = document.getElementById("login");
+    const app = document.getElementById("app");
+    const eventFilter = document.getElementById("eventFilter");
+    const statusFilter = document.getElementById("statusFilter");
+    const editor = document.getElementById("eventEditor");
+    let events = [];
+
+    function authed() { return !!localStorage.getItem("beyx_admin"); }
+
+    function showApp(on) {
+      loginForm.classList.toggle("hidden", on);
+      app.classList.toggle("hidden", !on);
+    }
+
+    document.getElementById("logout").onclick = () => {
+      localStorage.removeItem("beyx_admin");
+      showApp(false);
+    };
+
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const password = new FormData(loginForm).get("password");
+      const msg = document.getElementById("loginMsg");
+      msg.textContent = "";
+      try {
+        const data = await api("/api/admin/login", { method: "POST", body: { password } });
+        localStorage.setItem("beyx_admin", data.token);
+        showApp(true);
+        await boot();
+      } catch (err) {
+        msg.textContent = err.message;
+      }
+    });
+
+    function field(name, label, value = "", type = "text") {
+      return `<label>${label}<input name="${name}" type="${type}" value="${String(value ?? "").replace(/"/g, "&quot;")}" /></label>`;
+    }
+
+    function renderEditor(ev = {}) {
+      editor.classList.remove("hidden");
+      const cats = Array.isArray(ev.categories) ? ev.categories.join(",") : (ev.categories || "U12,公開組");
+      editor.innerHTML = `
+        <h3>${ev.id ? "編輯比賽" : "開新比賽"}</h3>
+        <form id="evForm">
+          <div class="row2">
+            ${field("title", "名稱", ev.title || "")}
+            ${field("slug", "Slug（網址）", ev.slug || "")}
+          </div>
+          ${field("subtitle", "副題", ev.subtitle || "")}
+          <div class="row2">
+            ${field("venue", "場地", ev.venue || "")}
+            ${field("address", "地址", ev.address || "")}
+          </div>
+          <div class="row2">
+            ${field("event_date", "日期", ev.event_date || "", "date")}
+            ${field("registration_deadline", "報名截止（可含時間）", ev.registration_deadline || "")}
+          </div>
+          <div class="row2">
+            ${field("start_time", "開始", ev.start_time || "", "time")}
+            ${field("end_time", "結束", ev.end_time || "", "time")}
+          </div>
+          <div class="row2">
+            ${field("capacity", "名額", ev.capacity ?? 32, "number")}
+            ${field("entry_fee", "報名費", ev.entry_fee ?? 50, "number")}
+          </div>
+          ${field("categories", "組別（逗號分隔）", cats)}
+          <label>簡介<textarea name="description">${ev.description || ""}</textarea></label>
+          <label>規則<textarea name="rules">${ev.rules || ""}</textarea></label>
+          <div class="row2">
+            ${field("payme_id", "PayMe 號碼／ID", ev.payme_id || "")}
+            ${field("payme_link", "PayMe 連結", ev.payme_link || "")}
+          </div>
+          <div class="row2">
+            ${field("fps_id", "FPS 電話／識別碼", ev.fps_id || "")}
+            ${field("fps_name", "FPS 戶名", ev.fps_name || "")}
+          </div>
+          ${field("whatsapp", "主辦 WhatsApp", ev.whatsapp || "")}
+          <label>付款備註<textarea name="payment_note">${ev.payment_note || "確認後請轉帳，備註填 Belader 名稱。"}</textarea></label>
+          <label><input type="checkbox" name="registration_open" ${ev.registration_open !== false ? "checked" : ""} /> 開放報名</label>
+          <label><input type="checkbox" name="show_public_list" ${ev.show_public_list ? "checked" : ""} /> 公開已報名名單</label>
+          <div class="toolbar">
+            <button class="btn" type="submit">儲存</button>
+            <button class="btn ghost" type="button" id="cancelEv">取消</button>
+            ${ev.id ? `<button class="btn bad" type="button" id="delEv">刪除比賽</button>` : ""}
+          </div>
+        </form>`;
+
+      document.getElementById("cancelEv").onclick = () => editor.classList.add("hidden");
+      document.getElementById("evForm").onsubmit = async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const body = Object.fromEntries(fd.entries());
+        body.registration_open = fd.get("registration_open") === "on";
+        body.show_public_list = fd.get("show_public_list") === "on";
+        body.capacity = Number(body.capacity);
+        body.entry_fee = Number(body.entry_fee);
+        if (ev.id) await api("/api/admin/events/" + ev.id, { method: "PUT", body });
+        else await api("/api/admin/events", { method: "POST", body });
+        editor.classList.add("hidden");
+        await boot();
+      };
+      const del = document.getElementById("delEv");
+      if (del) del.onclick = async () => {
+        if (!confirm("刪除比賽同全部報名？")) return;
+        await api("/api/admin/events/" + ev.id, { method: "DELETE" });
+        editor.classList.add("hidden");
+        await boot();
+      };
+    }
+
+    async function loadRegs() {
+      const qs = new URLSearchParams();
+      if (eventFilter.value) qs.set("event_id", eventFilter.value);
+      if (statusFilter.value) qs.set("status", statusFilter.value);
+      const { registrations } = await api("/api/admin/registrations?" + qs.toString());
+      const box = document.getElementById("regs");
+      if (!registrations.length) {
+        box.innerHTML = "<p class='lede'>未有報名。</p>";
+        return;
+      }
+      box.innerHTML = `<table>
+        <thead><tr><th>時間</th><th>玩家</th><th>聯絡</th><th>組別</th><th>狀態</th><th>動作</th></tr></thead>
+        <tbody>
+          ${registrations.map(r => `
+            <tr>
+              <td>${(r.created_at || "").replace("T"," ").slice(0,16)}</td>
+              <td><strong>${r.display_name}</strong><br>${r.real_name || ""}<br><span class="lede">${r.notes || ""}</span></td>
+              <td>${r.whatsapp}</td>
+              <td>${r.category || ""}</td>
+              <td>${statusPill(r.status)}<br><span class="lede">${r.paid_ref || ""}</span></td>
+              <td>
+                <div class="toolbar">
+                  <button class="btn small ok" data-act="confirmed" data-id="${r.id}">確認</button>
+                  <button class="btn small" data-act="paid" data-id="${r.id}">已收款</button>
+                  <button class="btn small warn" data-act="waitlist" data-id="${r.id}">候補</button>
+                  <button class="btn small bad" data-act="rejected" data-id="${r.id}">拒絕</button>
+                  <button class="btn small ghost" data-copy="${encodeURIComponent(r.wa_message || "")}">複製 WhatsApp</button>
+                </div>
+              </td>
+            </tr>`).join("")}
+        </tbody></table>`;
+
+      box.querySelectorAll("[data-act]").forEach(btn => {
+        btn.onclick = async () => {
+          let paid_ref = "";
+          if (btn.dataset.act === "paid") paid_ref = prompt("付款備註（可選，例如轉帳後4位）", "") || "";
+          const data = await api("/api/admin/registrations/" + btn.dataset.id, {
+            method: "PATCH",
+            body: { status: btn.dataset.act, paid_ref },
+          });
+          if (btn.dataset.act === "confirmed" && data.wa_message) {
+            await navigator.clipboard.writeText(data.wa_message).catch(() => {});
+            alert("已確認，WhatsApp 訊息已複製（如瀏覽器允許）。");
+          }
+          await loadRegs();
+        };
+      });
+      box.querySelectorAll("[data-copy]").forEach(btn => {
+        btn.onclick = async () => {
+          await navigator.clipboard.writeText(decodeURIComponent(btn.dataset.copy));
+          btn.textContent = "已複製";
+        };
+      });
+    }
+
+    async function boot() {
+      const data = await api("/api/admin/events");
+      events = data.events;
+      const keep = eventFilter.value;
+      eventFilter.innerHTML = `<option value="">全部比賽</option>` + events.map(ev =>
+        `<option value="${ev.id}">${ev.title}（確認 ${ev.counts?.taken || 0}/${ev.capacity}）</option>`
+      ).join("");
+      if (keep) eventFilter.value = keep;
+      await loadRegs();
+    }
+
+    document.getElementById("newEvent").onclick = () => renderEditor({});
+    document.getElementById("reload").onclick = boot;
+    eventFilter.onchange = loadRegs;
+    statusFilter.onchange = loadRegs;
+    eventFilter.addEventListener("change", () => {
+      const ev = events.find(e => String(e.id) === eventFilter.value);
+      if (ev) renderEditor(ev);
+    });
+
+    if (authed()) {
+      showApp(true);
+      boot().catch((e) => {
+        if (String(e.message).includes("未授權")) {
+          localStorage.removeItem("beyx_admin");
+          showApp(false);
+        } else alert(e.message);
+      });
+    }
+  </script>
+</body>
+</html>

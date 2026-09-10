@@ -1,0 +1,30 @@
+INSERT INTO events (
+  slug, title, subtitle, venue, address, event_date, start_time, end_time,
+  description, rules, categories, capacity, entry_fee, currency,
+  payme_id, payme_link, fps_id, fps_name, payment_note, whatsapp,
+  registration_open, registration_deadline, show_public_list
+) VALUES (
+  '2026-hk-open',
+  '香港 Beyblade X 公開賽 2026',
+  '可重用範本比賽 — 請喺後台改資料',
+  '示範場地',
+  '香港',
+  '2026-10-18',
+  '13:00',
+  '18:00',
+  '呢場係示範比賽。Admin 確認報名之後，先會喺「我的報名」頁顯示付款方式。',
+  '1. 使用官方認可零件\n2. 自備發射器同備件\n3. 主辦保留最終裁決權',
+  '["U12","公開組"]',
+  32,
+  50,
+  'HKD',
+  '',
+  '',
+  '',
+  '',
+  '確認後請轉帳，備註填寫你嘅 Belader 名稱。轉完將最後 4 位或時間回覆主辦。',
+  '',
+  1,
+  '2026-10-16T23:59:00',
+  1
+);

@@ -1,0 +1,16 @@
+name = "beyblade-reg"
+compatibility_date = "2026-09-01"
+pages_build_output_dir = "public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "beyblade-reg"
+database_id = "REPLACE_WITH_YOUR_D1_ID"
+
+[vars]
+APP_NAME = "BEYX REG"
+# 本地開發先用；正式環境請喺 Cloudflare Dashboard → Settings → Environment variables 設定，唔好 commit 真密碼
+ADMIN_PASSWORD = "change-me-now"
+ADMIN_SECRET = "change-this-long-random-secret"
+# 可選：Cloudflare Turnstile site key（公開）
+TURNSTILE_SITE_KEY = ""
