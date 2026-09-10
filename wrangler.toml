@@ -14,7 +14,7 @@ pages_build_output_dir = "public"
 [[d1_databases]]
 binding = "DB"
 database_name = "beyblade-reg"
-database_id = "REPLACE_WITH_YOUR_D1_ID"
+database_id = "1ed5edf7-183e-45ff-ae8b-da956a7f97fd"
 
 [vars]
 APP_NAME = "BEYX REG"
