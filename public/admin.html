@@ -133,9 +133,10 @@
           </div>
           ${field("whatsapp", "主辦 WhatsApp", ev.whatsapp || "")}
           <label>付款備註<textarea name="payment_note">${ev.payment_note || "確認後請轉帳，備註填 Belader 名稱。"}</textarea></label>
-          ${ev.poster_url ? `<p><img class="poster" src="${ev.poster_url}" alt="海報" /></p>` : ""}
-          ${ev.id ? `<label>上傳海報（JPG/PNG/WEBP，3MB 內）<input type="file" id="posterFile" accept="image/jpeg,image/png,image/webp,image/gif" /></label>
-          <label>或貼海報圖片網址<input name="poster_url" value="${String(ev.poster_url || "").replace(/"/g, "&quot;")}" placeholder="https://..." /></label>` : `<p class="lede">先儲存比賽，之後先可以上傳海報。</p>`}
+          ${ev.poster_url ? `<p><img class="poster" src="${ev.poster_url}" alt="海報" /></p>
+          <button class="btn bad" type="button" id="delPoster">移除海報</button>` : ""}
+          <label>上傳海報（JPG/PNG/WEBP；未開 R2 請小於 450KB）<input type="file" id="posterFile" accept="image/jpeg,image/png,image/webp,image/gif" /></label>
+          <label>或貼海報圖片網址<input name="poster_url" value="${String(ev.poster_url || "").startsWith("http") || String(ev.poster_url || "").startsWith("/") ? String(ev.poster_url).replace(/"/g, "&quot;") : ""}" placeholder="https://..." /></label>
           <label><input type="checkbox" name="registration_open" ${ev.registration_open !== false ? "checked" : ""} /> 開放報名</label>
           <label><input type="checkbox" name="show_public_list" ${ev.show_public_list ? "checked" : ""} /> 公開已報名名單</label>
           <div class="toolbar">
@@ -154,28 +155,32 @@
         body.show_public_list = fd.get("show_public_list") === "on";
         body.capacity = Number(body.capacity);
         body.entry_fee = Number(body.entry_fee);
-        let id = ev.id;
-        if (id) await api("/api/admin/events/" + id, { method: "PUT", body });
-        else {
-          const created = await api("/api/admin/events", { method: "POST", body });
-          id = created.id;
+        try {
+          let id = ev.id;
+          if (id) await api("/api/admin/events/" + id, { method: "PUT", body });
+          else {
+            const created = await api("/api/admin/events", { method: "POST", body });
+            id = created.id;
+          }
+          const file = document.getElementById("posterFile")?.files?.[0];
+          if (id && (file || (body.poster_url && !String(body.poster_url).startsWith("data:")))) {
+            const fdPoster = new FormData();
+            if (file) fdPoster.append("file", file);
+            if (body.poster_url) fdPoster.append("poster_url", body.poster_url);
+            const token = localStorage.getItem("beyx_admin");
+            const res = await fetch("/api/admin/events/" + id + "/poster", {
+              method: "POST",
+              headers: { authorization: "Bearer " + token },
+              body: fdPoster,
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.ok === false) throw new Error(data.error || "海報上傳失敗");
+          }
+          editor.classList.add("hidden");
+          await boot();
+        } catch (err) {
+          alert(err.message || "儲存失敗");
         }
-        const file = document.getElementById("posterFile")?.files?.[0];
-        if (id && (file || body.poster_url)) {
-          const fdPoster = new FormData();
-          if (file) fdPoster.append("file", file);
-          if (body.poster_url) fdPoster.append("poster_url", body.poster_url);
-          const token = localStorage.getItem("beyx_admin");
-          const res = await fetch("/api/admin/events/" + id + "/poster", {
-            method: "POST",
-            headers: { authorization: "Bearer " + token },
-            body: fdPoster,
-          });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok || data.ok === false) throw new Error(data.error || "海報上傳失敗");
-        }
-        editor.classList.add("hidden");
-        await boot();
       };
       const del = document.getElementById("delEv");
       if (del) del.onclick = async () => {
@@ -183,6 +188,18 @@
         await api("/api/admin/events/" + ev.id, { method: "DELETE" });
         editor.classList.add("hidden");
         await boot();
+      };
+      const delPoster = document.getElementById("delPoster");
+      if (delPoster) delPoster.onclick = async () => {
+        if (!ev.id) return;
+        if (!confirm("移除呢張海報？")) return;
+        try {
+          await api("/api/admin/events/" + ev.id + "/poster", { method: "DELETE" });
+          ev.poster_url = "";
+          renderEditor(ev);
+        } catch (err) {
+          alert(err.message || "移除失敗");
+        }
       };
     }
 
