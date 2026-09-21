@@ -27,6 +27,7 @@
     <div id="app" class="hidden">
       <div class="toolbar">
         <button class="btn" id="newEvent" type="button">開新比賽</button>
+        <button class="btn ghost" id="editEvent" type="button">編輯所選比賽</button>
         <select id="eventFilter"></select>
         <select id="statusFilter">
           <option value="">全部狀態</option>
@@ -40,7 +41,7 @@
       </div>
       <div id="eventEditor" class="card hidden"></div>
       <div class="card" style="overflow:auto">
-        <h3>報名名單</h3>
+        <h3 id="regTitle">報名名單</h3>
         <div id="regs"></div>
       </div>
     </div>
@@ -126,6 +127,9 @@
           </div>
           ${field("whatsapp", "主辦 WhatsApp", ev.whatsapp || "")}
           <label>付款備註<textarea name="payment_note">${ev.payment_note || "確認後請轉帳，備註填 Belader 名稱。"}</textarea></label>
+          ${ev.poster_url ? `<p><img class="poster" src="${ev.poster_url}" alt="海報" /></p>` : ""}
+          ${ev.id ? `<label>上傳海報（JPG/PNG/WEBP，3MB 內）<input type="file" id="posterFile" accept="image/jpeg,image/png,image/webp,image/gif" /></label>
+          <label>或貼海報圖片網址<input name="poster_url" value="${String(ev.poster_url || "").replace(/"/g, "&quot;")}" placeholder="https://..." /></label>` : `<p class="lede">先儲存比賽，之後先可以上傳海報。</p>`}
           <label><input type="checkbox" name="registration_open" ${ev.registration_open !== false ? "checked" : ""} /> 開放報名</label>
           <label><input type="checkbox" name="show_public_list" ${ev.show_public_list ? "checked" : ""} /> 公開已報名名單</label>
           <div class="toolbar">
@@ -144,8 +148,26 @@
         body.show_public_list = fd.get("show_public_list") === "on";
         body.capacity = Number(body.capacity);
         body.entry_fee = Number(body.entry_fee);
-        if (ev.id) await api("/api/admin/events/" + ev.id, { method: "PUT", body });
-        else await api("/api/admin/events", { method: "POST", body });
+        let id = ev.id;
+        if (id) await api("/api/admin/events/" + id, { method: "PUT", body });
+        else {
+          const created = await api("/api/admin/events", { method: "POST", body });
+          id = created.id;
+        }
+        const file = document.getElementById("posterFile")?.files?.[0];
+        if (id && (file || body.poster_url)) {
+          const fdPoster = new FormData();
+          if (file) fdPoster.append("file", file);
+          if (body.poster_url) fdPoster.append("poster_url", body.poster_url);
+          const token = localStorage.getItem("beyx_admin");
+          const res = await fetch("/api/admin/events/" + id + "/poster", {
+            method: "POST",
+            headers: { authorization: "Bearer " + token },
+            body: fdPoster,
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false) throw new Error(data.error || "海報上傳失敗");
+        }
         editor.classList.add("hidden");
         await boot();
       };
@@ -160,7 +182,17 @@
 
     async function loadRegs() {
       const qs = new URLSearchParams();
-      if (eventFilter.value) qs.set("event_id", eventFilter.value);
+      if (!eventFilter.value) {
+        document.getElementById("regTitle").textContent = "報名名單";
+        document.getElementById("regs").innerHTML = "<p class='lede'>請先喺上面揀一場比賽。</p>";
+        return;
+      }
+      qs.set("event_id", eventFilter.value);
+      localStorage.setItem("beyx_admin_event", eventFilter.value);
+      const ev = events.find((e) => String(e.id) === eventFilter.value);
+      document.getElementById("regTitle").textContent = ev
+        ? `報名名單 — ${ev.title}`
+        : "報名名單";
       if (statusFilter.value) qs.set("status", statusFilter.value);
       const { registrations } = await api("/api/admin/registrations?" + qs.toString());
       const box = document.getElementById("regs");
@@ -215,23 +247,27 @@
 
     async function boot() {
       const data = await api("/api/admin/events");
-      events = data.events;
-      const keep = eventFilter.value;
-      eventFilter.innerHTML = `<option value="">全部比賽</option>` + events.map(ev =>
-        `<option value="${ev.id}">${ev.title}（確認 ${ev.counts?.taken || 0}/${ev.capacity}）</option>`
-      ).join("");
-      if (keep) eventFilter.value = keep;
+      events = data.events || [];
+      const saved = localStorage.getItem("beyx_admin_event");
+      const keep = eventFilter.value || saved || (events[0] ? String(events[0].id) : "");
+      eventFilter.innerHTML = events.length
+        ? events.map(ev =>
+            `<option value="${ev.id}">${ev.title}（確認 ${ev.counts?.taken || 0}/${ev.capacity}）</option>`
+          ).join("")
+        : `<option value="">未有比賽</option>`;
+      if (keep && events.some((e) => String(e.id) === String(keep))) eventFilter.value = keep;
       await loadRegs();
     }
 
     document.getElementById("newEvent").onclick = () => renderEditor({});
+    document.getElementById("editEvent").onclick = () => {
+      const ev = events.find((e) => String(e.id) === eventFilter.value);
+      if (ev) renderEditor(ev);
+      else alert("請先揀一場比賽");
+    };
     document.getElementById("reload").onclick = boot;
     eventFilter.onchange = loadRegs;
     statusFilter.onchange = loadRegs;
-    eventFilter.addEventListener("change", () => {
-      const ev = events.find(e => String(e.id) === eventFilter.value);
-      if (ev) renderEditor(ev);
-    });
 
     if (authed()) {
       showApp(true);
