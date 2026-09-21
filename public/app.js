@@ -41,6 +41,15 @@ export function statusPill(status) {
   return `<span class="pill ${status}">${STATUS_LABEL[status] || status}</span>`;
 }
 
+export function kindLabel(ev) {
+  return ev?.event_kind === "funplay" ? "Fun Play" : "比賽";
+}
+
+export function kindPill(ev) {
+  const fun = ev?.event_kind === "funplay";
+  return `<span class="pill ${fun ? "waitlist" : ""}">${kindLabel(ev)}</span>`;
+}
+
 export function nav(extra = "") {
   return `<div class="nav">
     <a class="brand" href="/"><span class="spin"></span> BEYX REG</a>
