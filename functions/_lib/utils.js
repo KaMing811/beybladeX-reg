@@ -50,11 +50,22 @@ export function parseCategories(raw) {
     .filter(Boolean);
 }
 
+export const EVENT_KINDS = {
+  tournament: "比賽",
+  funplay: "Fun Play",
+};
+
+export function normalizeKind(v) {
+  const k = String(v || "").toLowerCase();
+  return k === "funplay" || k === "fun" || k === "fun-play" ? "funplay" : "tournament";
+}
+
 export function publicEvent(row) {
   if (!row) return null;
   const deadline = row.registration_deadline || "";
   const openFlag = Number(row.registration_open) === 1;
   const notExpired = !deadline || new Date(deadline).getTime() >= Date.now();
+  const event_kind = normalizeKind(row.event_kind);
   return {
     id: row.id,
     slug: row.slug,
@@ -75,6 +86,9 @@ export function publicEvent(row) {
     registration_open: openFlag && notExpired,
     registration_deadline: deadline,
     show_public_list: Number(row.show_public_list) === 1,
+    poster_url: row.poster_url || "",
+    event_kind,
+    event_kind_label: EVENT_KINDS[event_kind],
   };
 }
 
