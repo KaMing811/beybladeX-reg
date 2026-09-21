@@ -14,6 +14,6 @@ database_name = "beyblade-reg"
 database_id = "1ed5edf7-183e-45ff-ae8b-da956a7f97fd"
 
 # 可選：海報上傳。Dashboard 建立 R2 bucket 後綁到呢度
-# [[r2_buckets]]
-# binding = "POSTERS"
-# bucket_name = "beyblade-posters"
+[[r2_buckets]]
+binding = "POSTERS"
+bucket_name = "beyblade-posters"
