@@ -1,23 +1,19 @@
-name = "beyblade-reg"
+name = "beybladex-reg"
 main = "src/worker.js"
-compatibility_date = "2026-09-01"
+compatibility_date = "2026-09-10"
 
-# 新版 Workers Builds（你而家用緊 npx wrangler deploy）會用呢個
 [assets]
 directory = "./public"
 binding = "ASSETS"
 run_worker_first = true
 
-# 如果改用經典 Pages Git 部署，呢行仍然有效
-pages_build_output_dir = "public"
-
+# 必須換成 D1 頁面嗰串 UUID，唔可以留 REPLACE
 [[d1_databases]]
 binding = "DB"
 database_name = "beyblade-reg"
 database_id = "1ed5edf7-183e-45ff-ae8b-da956a7f97fd"
 
-[vars]
-APP_NAME = "BEYX REG"
-ADMIN_PASSWORD = "As123456!@"
-ADMIN_SECRET = "As123456!@"
-TURNSTILE_SITE_KEY = ""
+# 可選：海報上傳。Dashboard 建立 R2 bucket 後綁到呢度
+# [[r2_buckets]]
+# binding = "POSTERS"
+# bucket_name = "beyblade-posters"
