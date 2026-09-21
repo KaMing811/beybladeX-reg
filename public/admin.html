@@ -91,8 +91,14 @@
       editor.classList.remove("hidden");
       const cats = Array.isArray(ev.categories) ? ev.categories.join(",") : (ev.categories || "U12,公開組");
       editor.innerHTML = `
-        <h3>${ev.id ? "編輯比賽" : "開新比賽"}</h3>
+        <h3>${ev.id ? "編輯場次" : "開新場次"}</h3>
         <form id="evForm">
+          <label>類型
+            <select name="event_kind">
+              <option value="tournament" ${ev.event_kind !== "funplay" ? "selected" : ""}>比賽</option>
+              <option value="funplay" ${ev.event_kind === "funplay" ? "selected" : ""}>Fun Play</option>
+            </select>
+          </label>
           <div class="row2">
             ${field("title", "名稱", ev.title || "")}
             ${field("slug", "Slug（網址）", ev.slug || "")}
@@ -252,7 +258,7 @@
       const keep = eventFilter.value || saved || (events[0] ? String(events[0].id) : "");
       eventFilter.innerHTML = events.length
         ? events.map(ev =>
-            `<option value="${ev.id}">${ev.title}（確認 ${ev.counts?.taken || 0}/${ev.capacity}）</option>`
+            `<option value="${ev.id}">${ev.event_kind === "funplay" ? "[Fun Play] " : "[比賽] "}${ev.title}（確認 ${ev.counts?.taken || 0}/${ev.capacity}）</option>`
           ).join("")
         : `<option value="">未有比賽</option>`;
       if (keep && events.some((e) => String(e.id) === String(keep))) eventFilter.value = keep;
