@@ -526,73 +526,72 @@
     }
 
     async function generateBracket() {
-      if (!eventFilter.value) return alert("請先揀比賽");
-      if (!confirm("用最近一次抽選結果生成淘汰賽？")) return;
+  if (!eventFilter.value) return alert("請先揀比賽");
+  if (!confirm("用最近一次抽選結果生成淘汰賽？")) return;
 
-      try {
-        const data = await api("/api/admin/brackets", {
-          method: "POST",
-          body: { event_id: Number(eventFilter.value) },
-        });
-
-       const box = document.getElementById("bracketArea");
-const rounds = data.rounds;
-
-let html = `
-  <h3 style="margin-bottom:1rem">淘汰賽名單（${data.players.length} 人，${data.byes} 個 bye）</h3>
-  <div style="display:flex; gap:2rem; overflow-x:auto; padding:1rem 0; align-items:flex-start;">
-`;
-
-rounds.forEach((round, ri) => {
-  const roundName = ri === 0 ? "第一輪" :
-                    ri === rounds.length - 1 ? "決賽" :
-                    `第 ${ri + 1} 輪`;
-
-  html += `
-    <div style="min-width:200px; flex-shrink:0;">
-      <div style="font-weight:700; text-align:center; color:#f97316; margin-bottom:1rem;">${roundName}</div>
-      <div style="display:flex; flex-direction:column; gap:1.2rem;">
-  `;
-
-  round.forEach((m) => {
-    const p1 = m.p1 ? `<div style="padding:0.4rem 0.6rem; border-bottom:1px solid #334155;">${m.p1.name}<br><span style="font-size:0.75rem; opacity:0.6">${m.p1.phone || ""}</span></div>` : `<div style="padding:0.4rem 0.6rem; border-bottom:1px solid #334155; opacity:0.4;">BYE</div>`;
-    const p2 = m.p2 ? `<div style="padding:0.4rem 0.6rem;">${m.p2.name}<br><span style="font-size:0.75rem; opacity:0.6">${m.p2.phone || ""}</span></div>` : `<div style="padding:0.4rem 0.6rem; opacity:0.4;">BYE</div>`;
-
-    html += `
-      <div style="background:#1e2937; border:1px solid #475569; border-radius:6px; overflow:hidden; font-size:0.85rem; position:relative;">
-        ${p1}
-        ${p2}
-      </div>
-    `;
-  });
-
-  html += `
-      </div>
-    </div>
-  `;
-
-  // 加連接線（除最後一輪）
-  if (ri < rounds.length - 1) {
-    html += `<div style="width:40px; flex-shrink:0; position:relative;">`;
-    round.forEach((_, mi) => {
-      if (mi % 2 === 0) {
-        html += `
-          <div style="position:absolute; left:0; width:20px; height:2px; background:#64748b; top:${(mi * 80 + 40)}px;"></div>
-          <div style="position:absolute; left:20px; width:2px; height:80px; background:#64748b; top:${(mi * 80 + 40)}px;"></div>
-          <div style="position:absolute; left:20px; width:20px; height:2px; background:#64748b; top:${(mi * 80 + 80)}px;"></div>
-        `;
-      }
+  try {
+    const data = await api("/api/admin/brackets", {
+      method: "POST",
+      body: { event_id: Number(eventFilter.value) },
     });
-    html += `</div>`;
-  }
-});
 
-html += `</div>`;
-box.innerHTML = html;
-      } catch (err) {
-        alert(err.message || "生成失敗");
-      }
-    }
+    const box = document.getElementById("bracketArea");
+    const rounds = data.rounds;
+    const totalRounds = rounds.length;
+
+    // 計算每輪高度同位置
+    const matchHeight = 70;
+    const gap = 20;
+    const roundWidth = 200;
+    const connectorWidth = 50;
+
+    let html = `<h3 style="margin-bottom:1rem">淘汰賽名單（${data.players.length} 人，${data.byes} 個 bye）</h3>`;
+    html += `<div style="overflow-x:auto; padding:1rem 0;">`;
+    html += `<svg id="bracketSvg" style="width:${(roundWidth + connectorWidth) * totalRounds}px; height:${rounds[0].length * (matchHeight + gap)}px;">`;
+
+    // 畫每一輪
+    rounds.forEach((round, ri) => {
+      const x = ri * (roundWidth + connectorWidth);
+      const matchesInThisRound = round.length;
+      const verticalSpacing = Math.pow(2, ri) * (matchHeight + gap);
+
+      round.forEach((m, mi) => {
+        const y = mi * verticalSpacing + (verticalSpacing - matchHeight) / 2;
+
+        // 比賽卡片
+        const p1 = m.p1 ? `${m.p1.name}<tspan x="${x + 10}" dy="16" font-size="11" opacity="0.6">${m.p1.phone || ""}</tspan>` : "BYE";
+        const p2 = m.p2 ? `${m.p2.name}<tspan x="${x + 10}" dy="16" font-size="11" opacity="0.6">${m.p2.phone || ""}</tspan>` : "BYE";
+
+        html += `
+          <rect x="${x}" y="${y}" width="${roundWidth}" height="${matchHeight}" rx="6" fill="#1e2937" stroke="#475569"/>
+          <text x="${x + 10}" y="${y + 22}" fill="#e2e8f0" font-size="13">${p1}</text>
+          <line x1="${x + 8}" y1="${y + 35}" x2="${x + roundWidth - 8}" y2="${y + 35}" stroke="#334155"/>
+          <text x="${x + 10}" y="${y + 52}" fill="#e2e8f0" font-size="13">${p2}</text>
+        `;
+
+        // 連接線（連去下一輪）
+        if (ri < totalRounds - 1) {
+          const nextY = Math.floor(mi / 2) * (verticalSpacing * 2) + (verticalSpacing * 2 - matchHeight) / 2 + matchHeight / 2;
+          const midX = x + roundWidth + connectorWidth / 2;
+
+          html += `
+            <line x1="${x + roundWidth}" y1="${y + matchHeight / 2}" x2="${midX}" y2="${y + matchHeight / 2}" stroke="#64748b" stroke-width="2"/>
+            <line x1="${midX}" y1="${y + matchHeight / 2}" x2="${midX}" y2="${nextY}" stroke="#64748b" stroke-width="2"/>
+            <line x1="${midX}" y1="${nextY}" x2="${x + roundWidth + connectorWidth}" y2="${nextY}" stroke="#64748b" stroke-width="2"/>
+          `;
+        }
+      });
+
+      // 輪次標題
+      html += `<text x="${x + roundWidth / 2}" y="20" fill="#f97316" font-size="14" font-weight="700" text-anchor="middle">${ri === 0 ? "第一輪" : ri === totalRounds - 1 ? "決賽" : "第 " + (ri + 1) + " 輪"}</text>`;
+    });
+
+    html += `</svg></div>`;
+    box.innerHTML = html;
+  } catch (err) {
+    alert(err.message || "生成失敗");
+  }
+}
 
     document.getElementById("genBracket").onclick = generateBracket;
 
