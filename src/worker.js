@@ -377,7 +377,6 @@ async function handleApi(request, env) {
 
       if (pool.length === 0) return error("冇符合條件嘅選手");
 
-      // 手動加入嘅人強制入選
       const forced = [];
       const remainingPool = [];
       for (const p of pool) {
@@ -391,20 +390,20 @@ async function handleApi(request, env) {
       const selectedForced = forced.slice(0, countNeeded);
       const needed = Math.max(0, countNeeded - selectedForced.length);
 
-      // 剩餘名額隨機抽
       for (let i = remainingPool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [remainingPool[i], remainingPool[j]] = [remainingPool[j], remainingPool[i]];
       }
       const selectedRandom = remainingPool.slice(0, needed);
 
-      const selected = [...selectedForced, ...selectedRandom];
+      let selected = [...selectedForced, ...selectedRandom];
       if (selected.length === 0) return error("冇可抽嘅選手");
+
       for (let i = selected.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-          [selected[i], selected[j]] = [selected[j], selected[i]];
-        }
-      
+        [selected[i], selected[j]] = [selected[j], selected[i]];
+      }
+
       const resultIds = selected.map(r => r.id);
 
       const ins = await env.DB.prepare(
@@ -436,6 +435,70 @@ async function handleApi(request, env) {
         "SELECT * FROM draws WHERE event_id = ? ORDER BY id DESC LIMIT 5"
       ).bind(Number(eventId)).all();
       return json({ ok: true, draws: rows.results || [] });
+    }
+
+    // ===== Replace disqualified =====
+    const drawReplace = path.match(/^\/api\/admin\/draws\/(\d+)\/replace$/);
+    if (drawReplace && method === "POST") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const drawId = Number(drawReplace[1]);
+      const body = await readJson(request);
+      if (!body) return error("無效資料");
+
+      const removeIds = Array.isArray(body.remove_ids)
+        ? body.remove_ids.map(Number).filter(Boolean)
+        : [];
+      if (!removeIds.length) return error("請選擇要移除嘅人");
+
+      const draw = await env.DB.prepare("SELECT * FROM draws WHERE id = ?").bind(drawId).first();
+      if (!draw) return error("搵唔到抽選記錄", 404);
+
+      const currentIds = JSON.parse(draw.result_ids || "[]");
+      const statuses = JSON.parse(draw.statuses || "[]");
+
+      const remaining = currentIds.filter(id => !removeIds.includes(id));
+      const needReplace = currentIds.length - remaining.length;
+      if (needReplace <= 0) return error("冇人被移除");
+
+      const exclude = [...new Set([...currentIds, ...removeIds])];
+      const placeholders = statuses.map(() => "?").join(",");
+      const excludePlaceholders = exclude.map(() => "?").join(",");
+      const sql = `SELECT id, display_name, status FROM registrations 
+                   WHERE event_id = ? AND status IN (${placeholders}) 
+                   AND id NOT IN (${excludePlaceholders})`;
+      const binds = [draw.event_id, ...statuses, ...exclude];
+
+      const candidates = await env.DB.prepare(sql).bind(...binds).all();
+      let pool = candidates.results || [];
+
+      if (pool.length < needReplace) {
+        return error(`只剩 ${pool.length} 人可補，唔夠補 ${needReplace} 個`);
+      }
+
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      const replacements = pool.slice(0, needReplace);
+
+      let newResultIds = [...remaining, ...replacements.map(r => r.id)];
+
+      for (let i = newResultIds.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newResultIds[i], newResultIds[j]] = [newResultIds[j], newResultIds[i]];
+      }
+
+      await env.DB.prepare(
+        "UPDATE draws SET result_ids = ? WHERE id = ?"
+      ).bind(JSON.stringify(newResultIds), drawId).run();
+
+      return json({
+        ok: true,
+        removed: removeIds.length,
+        added: replacements.map(r => ({ id: r.id, name: r.display_name })),
+        new_result_ids: newResultIds,
+      });
     }
 
     // ===== Bracket API =====
