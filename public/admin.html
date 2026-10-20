@@ -492,14 +492,14 @@
           </div>
         `;
 
-        const listBox = document.getElementById("disqualifyList");
-        listBox.innerHTML = resultIds.map(id => {
-          const r = regMap[id];
-          const name = r ? `${r.display_name} ${r.whatsapp}` : `ID ${id}`;
-          return `<label style="display:block; margin:0.2rem 0">
-            <input type="checkbox" class="dq-chk" value="${id}"> ${name}
-          </label>`;
-        }).join("");
+       listBox.innerHTML = resultIds.map(id => {
+  const r = regMap[id];
+  const name = r ? `${r.display_name}　${r.whatsapp}` : `ID ${id}`;
+  return `<label style="display:flex; align-items:center; gap:0.6rem; margin:0.35rem 0; cursor:pointer;">
+    <input type="checkbox" class="dq-chk" value="${id}" style="width:18px; height:18px; flex-shrink:0;">
+    <span>${name}</span>
+  </label>`;
+}).join("");
 
         document.getElementById("doReplace").onclick = async () => {
           const removeIds = [...document.querySelectorAll(".dq-chk:checked")].map(el => Number(el.value));
