@@ -301,3 +301,321 @@ async function handleApi(request, env) {
       let sql = `SELECT r.*, e.title AS event_title, e.slug AS event_slug,
                         e.payme_id, e.payme_link, e.fps_id, e.fps_name, e.payment_note,
                         e.entry_fee, e.currency, e.whatsapp AS event_whatsapp
+                 FROM registrations r JOIN events e ON e.id = r.event_id`;
+      const binds = [];
+      const where = [];
+      if (eventId) { where.push("r.event_id = ?"); binds.push(Number(eventId)); }
+      if (status) { where.push("r.status = ?"); binds.push(status); }
+      if (where.length) sql += " WHERE " + where.join(" AND ");
+      sql += " ORDER BY r.created_at DESC";
+      const stmt = env.DB.prepare(sql);
+      const rows = binds.length ? await stmt.bind(...binds).all() : await stmt.all();
+      return json({
+        ok: true,
+        registrations: (rows.results || []).map((r) => ({ ...r, wa_message: buildWhatsappMessage(r, r) })),
+      });
+    }
+
+    const adminReg = path.match(/^\/api\/admin\/registrations\/(\d+)$/);
+    if (adminReg && method === "PATCH") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const id = Number(adminReg[1]);
+      const body = await readJson(request);
+      if (!body) return error("無效資料");
+      const row = await env.DB.prepare("SELECT * FROM registrations WHERE id = ?").bind(id).first();
+      if (!row) return error("找不到報名", 404);
+      const nextStatus = body.status ? cleanText(body.status, 20) : row.status;
+      if (!STATUSES.includes(nextStatus)) return error("狀態無效");
+      const admin_note = body.admin_note != null ? cleanText(body.admin_note, 300) : row.admin_note;
+      const paid_ref = body.paid_ref != null ? cleanText(body.paid_ref, 80) : row.paid_ref;
+      let confirmed_at = row.confirmed_at;
+      let paid_at = row.paid_at;
+      if (nextStatus === "confirmed" && !confirmed_at) confirmed_at = nowIso();
+      if (nextStatus === "paid") {
+        paid_at = nowIso();
+        if (!confirmed_at) confirmed_at = nowIso();
+      }
+      await env.DB.prepare(
+        `UPDATE registrations SET status=?, admin_note=?, paid_ref=?, confirmed_at=?, paid_at=?, updated_at=? WHERE id=?`
+      ).bind(nextStatus, admin_note, paid_ref, confirmed_at, paid_at, nowIso(), id).run();
+      const updated = await env.DB.prepare("SELECT * FROM registrations WHERE id = ?").bind(id).first();
+      const event = await env.DB.prepare("SELECT * FROM events WHERE id = ?").bind(row.event_id).first();
+      return json({ ok: true, registration: updated, wa_message: buildWhatsappMessage(event, updated) });
+    }
+
+    // ===== Draw APIs =====
+    if (path === "/api/admin/draws" && method === "POST") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const body = await readJson(request);
+      if (!body) return error("無效資料");
+
+      const eventId = Number(body.event_id);
+      const countNeeded = Math.max(1, Number(body.count) || 1);
+      const statuses = Array.isArray(body.statuses) && body.statuses.length
+        ? body.statuses
+        : ["paid"];
+      const manualInclude = Array.isArray(body.manual_include)
+        ? body.manual_include.map(Number).filter(Boolean)
+        : [];
+
+      if (!eventId) return error("缺少比賽");
+
+      const placeholders = statuses.map(() => "?").join(",");
+      let sql = `SELECT id, display_name, status FROM registrations WHERE event_id = ? AND (status IN (${placeholders})`;
+      const binds = [eventId, ...statuses];
+
+      if (manualInclude.length) {
+        sql += ` OR id IN (${manualInclude.map(() => "?").join(",")})`;
+        binds.push(...manualInclude);
+      }
+      sql += ")";
+
+      const candidates = await env.DB.prepare(sql).bind(...binds).all();
+      const pool = candidates.results || [];
+
+      if (pool.length === 0) return error("冇符合條件嘅選手");
+
+      const forced = [];
+      const remainingPool = [];
+      for (const p of pool) {
+        if (manualInclude.includes(p.id)) {
+          forced.push(p);
+        } else {
+          remainingPool.push(p);
+        }
+      }
+
+      const selectedForced = forced.slice(0, countNeeded);
+      const needed = Math.max(0, countNeeded - selectedForced.length);
+
+      for (let i = remainingPool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [remainingPool[i], remainingPool[j]] = [remainingPool[j], remainingPool[i]];
+      }
+      const selectedRandom = remainingPool.slice(0, needed);
+
+      let selected = [...selectedForced, ...selectedRandom];
+      if (selected.length === 0) return error("冇可抽嘅選手");
+
+      for (let i = selected.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [selected[i], selected[j]] = [selected[j], selected[i]];
+      }
+
+      const resultIds = selected.map(r => r.id);
+
+      const ins = await env.DB.prepare(
+        `INSERT INTO draws (event_id, count_needed, statuses, manual_include, result_ids, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).bind(
+        eventId,
+        countNeeded,
+        JSON.stringify(statuses),
+        JSON.stringify(manualInclude),
+        JSON.stringify(resultIds),
+        nowIso()
+      ).run();
+
+      return json({
+        ok: true,
+        draw_id: ins.meta.last_row_id,
+        candidates: pool.map(r => ({ id: r.id, name: r.display_name, status: r.status })),
+        selected: selected.map(r => ({ id: r.id, name: r.display_name, status: r.status })),
+      });
+    }
+
+    if (path === "/api/admin/draws" && method === "GET") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const eventId = url.searchParams.get("event_id");
+      if (!eventId) return error("缺少 event_id");
+      const rows = await env.DB.prepare(
+        "SELECT * FROM draws WHERE event_id = ? ORDER BY id DESC LIMIT 5"
+      ).bind(Number(eventId)).all();
+      return json({ ok: true, draws: rows.results || [] });
+    }
+
+    // ===== Replace disqualified =====
+    const drawReplace = path.match(/^\/api\/admin\/draws\/(\d+)\/replace$/);
+    if (drawReplace && method === "POST") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const drawId = Number(drawReplace[1]);
+      const body = await readJson(request);
+      if (!body) return error("無效資料");
+
+      const removeIds = Array.isArray(body.remove_ids)
+        ? body.remove_ids.map(Number).filter(Boolean)
+        : [];
+      if (!removeIds.length) return error("請選擇要移除嘅人");
+
+      const draw = await env.DB.prepare("SELECT * FROM draws WHERE id = ?").bind(drawId).first();
+      if (!draw) return error("搵唔到抽選記錄", 404);
+
+      const currentIds = JSON.parse(draw.result_ids || "[]");
+      const statuses = JSON.parse(draw.statuses || "[]");
+
+      const remaining = currentIds.filter(id => !removeIds.includes(id));
+      const needReplace = currentIds.length - remaining.length;
+      if (needReplace <= 0) return error("冇人被移除");
+
+      const exclude = [...new Set([...currentIds, ...removeIds])];
+      const placeholders = statuses.map(() => "?").join(",");
+      const excludePlaceholders = exclude.map(() => "?").join(",");
+      const sql = `SELECT id, display_name, status FROM registrations 
+                   WHERE event_id = ? AND status IN (${placeholders}) 
+                   AND id NOT IN (${excludePlaceholders})`;
+      const binds = [draw.event_id, ...statuses, ...exclude];
+
+      const candidates = await env.DB.prepare(sql).bind(...binds).all();
+      let pool = candidates.results || [];
+
+      if (pool.length < needReplace) {
+        return error(`只剩 ${pool.length} 人可補，唔夠補 ${needReplace} 個`);
+      }
+
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      const replacements = pool.slice(0, needReplace);
+
+      let newResultIds = [...remaining, ...replacements.map(r => r.id)];
+
+      for (let i = newResultIds.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newResultIds[i], newResultIds[j]] = [newResultIds[j], newResultIds[i]];
+      }
+
+      await env.DB.prepare(
+        "UPDATE draws SET result_ids = ? WHERE id = ?"
+      ).bind(JSON.stringify(newResultIds), drawId).run();
+
+      return json({
+        ok: true,
+        removed: removeIds.length,
+        added: replacements.map(r => ({ id: r.id, name: r.display_name })),
+        new_result_ids: newResultIds,
+      });
+    }
+
+    // ===== Bracket API =====
+    if (path === "/api/admin/brackets" && method === "POST") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const body = await readJson(request);
+      if (!body) return error("無效資料");
+
+      const eventId = Number(body.event_id);
+      if (!eventId) return error("缺少比賽");
+
+      const draw = await env.DB.prepare(
+        "SELECT * FROM draws WHERE event_id = ? ORDER BY id DESC LIMIT 1"
+      ).bind(eventId).first();
+      if (!draw) return error("搵唔到抽選記錄，請先抽選");
+
+      const resultIds = JSON.parse(draw.result_ids || "[]");
+      if (!resultIds.length) return error("抽選結果係空嘅");
+
+      const placeholders = resultIds.map(() => "?").join(",");
+      const regs = await env.DB.prepare(
+        `SELECT id, display_name, whatsapp FROM registrations WHERE id IN (${placeholders})`
+      ).bind(...resultIds).all();
+      const regMap = Object.fromEntries((regs.results || []).map(r => [r.id, r]));
+      const players = resultIds.map(id => ({
+        id,
+        name: regMap[id]?.display_name || "未知",
+        phone: regMap[id]?.whatsapp || "",
+      }));
+
+      const n = players.length;
+      const size = Math.pow(2, Math.ceil(Math.log2(Math.max(n, 1))));
+      const byes = size - n;
+
+      for (let i = players.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [players[i], players[j]] = [players[j], players[i]];
+      }
+
+      const firstRound = [];
+      let idx = 0;
+      for (let i = 0; i < size / 2; i++) {
+        const p1 = players[idx++] || null;
+        const p2 = idx < players.length ? players[idx++] : null;
+        firstRound.push({
+          p1: p1 ? { id: p1.id, name: p1.name, phone: p1.phone } : null,
+          p2: p2 ? { id: p2.id, name: p2.name, phone: p2.phone } : null,
+          winner: null,
+        });
+      }
+
+      const rounds = [firstRound];
+      let matchesInRound = Math.floor(firstRound.length / 2);
+      while (matchesInRound >= 1) {
+        const round = [];
+        for (let i = 0; i < matchesInRound; i++) {
+          round.push({ p1: null, p2: null, winner: null });
+        }
+        rounds.push(round);
+        matchesInRound = Math.floor(matchesInRound / 2);
+      }
+
+      const ins = await env.DB.prepare(
+        `INSERT INTO brackets (event_id, draw_id, players, rounds, created_at)
+         VALUES (?, ?, ?, ?, ?)`
+      ).bind(
+        eventId,
+        draw.id,
+        JSON.stringify(players),
+        JSON.stringify(rounds),
+        nowIso()
+      ).run();
+
+      return json({
+        ok: true,
+        bracket_id: ins.meta.last_row_id,
+        players,
+        rounds,
+        byes,
+      });
+    }
+
+    if (path === "/api/admin/brackets" && method === "GET") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const eventId = url.searchParams.get("event_id");
+      if (!eventId) return error("缺少 event_id");
+      const rows = await env.DB.prepare(
+        "SELECT * FROM brackets WHERE event_id = ? ORDER BY id DESC LIMIT 5"
+      ).bind(Number(eventId)).all();
+      return json({ ok: true, brackets: rows.results || [] });
+    }
+
+    return error("API 不存在", 404);
+  } catch (e) {
+    return error(e.message || "伺服器錯誤", 500);
+  }
+}
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const media = url.pathname.match(/^\/media\/posters\/(\d+)$/);
+    if (media && env.POSTERS) {
+      const obj = await env.POSTERS.get("posters/" + media[1]);
+      if (!obj) return new Response("Not found", { status: 404 });
+      const headers = new Headers();
+      headers.set("content-type", obj.httpMetadata?.contentType || "image/jpeg");
+      headers.set("cache-control", "public, max-age=86400");
+      return new Response(obj.body, { headers });
+    }
+    if (url.pathname.startsWith("/api/")) {
+      if (!env.DB) return error("未綁定 D1。Settings → Bindings 加入 D1，Variable name 必須係 DB", 500);
+      return handleApi(request, env);
+    }
+    if (env.ASSETS) return env.ASSETS.fetch(request);
+    return new Response("Not found", { status: 404 });
+  },
+};
