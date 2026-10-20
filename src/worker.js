@@ -400,7 +400,11 @@ async function handleApi(request, env) {
 
       const selected = [...selectedForced, ...selectedRandom];
       if (selected.length === 0) return error("冇可抽嘅選手");
-
+      for (let i = selected.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+          [selected[i], selected[j]] = [selected[j], selected[i]];
+        }
+      
       const resultIds = selected.map(r => r.id);
 
       const ins = await env.DB.prepare(
