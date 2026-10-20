@@ -411,9 +411,101 @@ async function handleApi(request, env) {
       const eventId = url.searchParams.get("event_id");
       if (!eventId) return error("缺少 event_id");
       const rows = await env.DB.prepare(
-        "SELECT * FROM draws WHERE event_id = ? ORDER BY id DESC LIMIT 20"
+        "SELECT * FROM draws WHERE event_id = ? ORDER BY id DESC LIMIT 5"
       ).bind(Number(eventId)).all();
       return json({ ok: true, draws: rows.results || [] });
+    }
+
+    // ===== Bracket API =====
+    if (path === "/api/admin/brackets" && method === "POST") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const body = await readJson(request);
+      if (!body) return error("無效資料");
+
+      const eventId = Number(body.event_id);
+      if (!eventId) return error("缺少比賽");
+
+      const draw = await env.DB.prepare(
+        "SELECT * FROM draws WHERE event_id = ? ORDER BY id DESC LIMIT 1"
+      ).bind(eventId).first();
+      if (!draw) return error("搵唔到抽選記錄，請先抽選");
+
+      const resultIds = JSON.parse(draw.result_ids || "[]");
+      if (!resultIds.length) return error("抽選結果係空嘅");
+
+      const placeholders = resultIds.map(() => "?").join(",");
+      const regs = await env.DB.prepare(
+        `SELECT id, display_name, whatsapp FROM registrations WHERE id IN (${placeholders})`
+      ).bind(...resultIds).all();
+      const regMap = Object.fromEntries((regs.results || []).map(r => [r.id, r]));
+      const players = resultIds.map(id => ({
+        id,
+        name: regMap[id]?.display_name || "未知",
+        phone: regMap[id]?.whatsapp || "",
+      }));
+
+      const n = players.length;
+      const size = Math.pow(2, Math.ceil(Math.log2(Math.max(n, 1))));
+      const byes = size - n;
+
+      for (let i = players.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [players[i], players[j]] = [players[j], players[i]];
+      }
+
+      const firstRound = [];
+      let idx = 0;
+      for (let i = 0; i < size / 2; i++) {
+        const p1 = players[idx++] || null;
+        const p2 = idx < players.length ? players[idx++] : null;
+        firstRound.push({
+          p1: p1 ? { id: p1.id, name: p1.name, phone: p1.phone } : null,
+          p2: p2 ? { id: p2.id, name: p2.name, phone: p2.phone } : null,
+          winner: null,
+        });
+      }
+
+      const rounds = [firstRound];
+      let matchesInRound = Math.floor(firstRound.length / 2);
+      while (matchesInRound >= 1) {
+        const round = [];
+        for (let i = 0; i < matchesInRound; i++) {
+          round.push({ p1: null, p2: null, winner: null });
+        }
+        rounds.push(round);
+        matchesInRound = Math.floor(matchesInRound / 2);
+      }
+
+      const ins = await env.DB.prepare(
+        `INSERT INTO brackets (event_id, draw_id, players, rounds, created_at)
+         VALUES (?, ?, ?, ?, ?)`
+      ).bind(
+        eventId,
+        draw.id,
+        JSON.stringify(players),
+        JSON.stringify(rounds),
+        nowIso()
+      ).run();
+
+      return json({
+        ok: true,
+        bracket_id: ins.meta.last_row_id,
+        players,
+        rounds,
+        byes,
+      });
+    }
+
+    if (path === "/api/admin/brackets" && method === "GET") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const eventId = url.searchParams.get("event_id");
+      if (!eventId) return error("缺少 event_id");
+      const rows = await env.DB.prepare(
+        "SELECT * FROM brackets WHERE event_id = ? ORDER BY id DESC LIMIT 5"
+      ).bind(Number(eventId)).all();
+      return json({ ok: true, brackets: rows.results || [] });
     }
 
     return error("API 不存在", 404);
