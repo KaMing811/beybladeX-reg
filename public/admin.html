@@ -535,51 +535,60 @@
           body: { event_id: Number(eventFilter.value) },
         });
 
-        const box = document.getElementById("bracketArea");
-        const rounds = data.rounds;
+       const box = document.getElementById("bracketArea");
+const rounds = data.rounds;
 
-        let html = `
-          <h3 style="margin-bottom:1rem">淘汰賽名單（${data.players.length} 人，${data.byes} 個 bye）</h3>
-          <div style="display:flex; gap:0; overflow-x:auto; padding-bottom:1rem; align-items:flex-start;">
+let html = `
+  <h3 style="margin-bottom:1rem">淘汰賽名單（${data.players.length} 人，${data.byes} 個 bye）</h3>
+  <div style="display:flex; gap:2rem; overflow-x:auto; padding:1rem 0; align-items:flex-start;">
+`;
+
+rounds.forEach((round, ri) => {
+  const roundName = ri === 0 ? "第一輪" :
+                    ri === rounds.length - 1 ? "決賽" :
+                    `第 ${ri + 1} 輪`;
+
+  html += `
+    <div style="min-width:200px; flex-shrink:0;">
+      <div style="font-weight:700; text-align:center; color:#f97316; margin-bottom:1rem;">${roundName}</div>
+      <div style="display:flex; flex-direction:column; gap:1.2rem;">
+  `;
+
+  round.forEach((m) => {
+    const p1 = m.p1 ? `<div style="padding:0.4rem 0.6rem; border-bottom:1px solid #334155;">${m.p1.name}<br><span style="font-size:0.75rem; opacity:0.6">${m.p1.phone || ""}</span></div>` : `<div style="padding:0.4rem 0.6rem; border-bottom:1px solid #334155; opacity:0.4;">BYE</div>`;
+    const p2 = m.p2 ? `<div style="padding:0.4rem 0.6rem;">${m.p2.name}<br><span style="font-size:0.75rem; opacity:0.6">${m.p2.phone || ""}</span></div>` : `<div style="padding:0.4rem 0.6rem; opacity:0.4;">BYE</div>`;
+
+    html += `
+      <div style="background:#1e2937; border:1px solid #475569; border-radius:6px; overflow:hidden; font-size:0.85rem; position:relative;">
+        ${p1}
+        ${p2}
+      </div>
+    `;
+  });
+
+  html += `
+      </div>
+    </div>
+  `;
+
+  // 加連接線（除最後一輪）
+  if (ri < rounds.length - 1) {
+    html += `<div style="width:40px; flex-shrink:0; position:relative;">`;
+    round.forEach((_, mi) => {
+      if (mi % 2 === 0) {
+        html += `
+          <div style="position:absolute; left:0; width:20px; height:2px; background:#64748b; top:${(mi * 80 + 40)}px;"></div>
+          <div style="position:absolute; left:20px; width:2px; height:80px; background:#64748b; top:${(mi * 80 + 40)}px;"></div>
+          <div style="position:absolute; left:20px; width:20px; height:2px; background:#64748b; top:${(mi * 80 + 80)}px;"></div>
         `;
+      }
+    });
+    html += `</div>`;
+  }
+});
 
-        rounds.forEach((round, ri) => {
-          const roundName = ri === 0 ? "第一輪" :
-                            ri === rounds.length - 1 ? "決賽" :
-                            `第 ${ri + 1} 輪`;
-
-          html += `
-            <div style="min-width:240px; flex-shrink:0; position:relative; padding-right:40px;">
-              <div style="font-weight:700; margin-bottom:1rem; text-align:center; color:#f97316;">${roundName}</div>
-              <div style="display:flex; flex-direction:column; gap:12px; position:relative;">
-          `;
-
-          round.forEach((m, mi) => {
-            const p1 = m.p1 ? `${m.p1.name}<br><span style="font-size:0.75rem; opacity:0.65">${m.p1.phone || ""}</span>` : "<span style='opacity:0.45'>BYE</span>";
-            const p2 = m.p2 ? `${m.p2.name}<br><span style="font-size:0.75rem; opacity:0.65">${m.p2.phone || ""}</span>` : "<span style='opacity:0.45'>BYE</span>";
-
-            html += `
-              <div style="background:#1e2937; border:1px solid #475569; border-radius:8px; padding:0.55rem 0.7rem; font-size:0.88rem; position:relative;">
-                <div style="padding:0.2rem 0; border-bottom:1px solid #334155;">${p1}</div>
-                <div style="padding:0.2rem 0;">${p2}</div>
-                ${ri < rounds.length - 1 ? `
-                  <div style="position:absolute; right:-40px; top:50%; width:40px; height:2px; background:#64748b; transform:translateY(-50%);"></div>
-                  ${mi % 2 === 0 ? `
-                    <div style="position:absolute; right:-40px; top:50%; width:2px; height:calc(100% + 12px); background:#64748b;"></div>
-                  ` : ""}
-                ` : ""}
-              </div>
-            `;
-          });
-
-          html += `
-              </div>
-            </div>
-          `;
-        });
-
-        html += `</div>`;
-        box.innerHTML = html;
+html += `</div>`;
+box.innerHTML = html;
       } catch (err) {
         alert(err.message || "生成失敗");
       }
