@@ -376,13 +376,31 @@ async function handleApi(request, env) {
       const pool = candidates.results || [];
 
       if (pool.length === 0) return error("冇符合條件嘅選手");
-      if (countNeeded > pool.length) return error(`只得 ${pool.length} 人，唔夠抽 ${countNeeded} 個`);
 
-      for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [pool[i], pool[j]] = [pool[j], pool[i]];
+      // 手動加入嘅人強制入選
+      const forced = [];
+      const remainingPool = [];
+      for (const p of pool) {
+        if (manualInclude.includes(p.id)) {
+          forced.push(p);
+        } else {
+          remainingPool.push(p);
+        }
       }
-      const selected = pool.slice(0, countNeeded);
+
+      const selectedForced = forced.slice(0, countNeeded);
+      const needed = Math.max(0, countNeeded - selectedForced.length);
+
+      // 剩餘名額隨機抽
+      for (let i = remainingPool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [remainingPool[i], remainingPool[j]] = [remainingPool[j], remainingPool[i]];
+      }
+      const selectedRandom = remainingPool.slice(0, needed);
+
+      const selected = [...selectedForced, ...selectedRandom];
+      if (selected.length === 0) return error("冇可抽嘅選手");
+
       const resultIds = selected.map(r => r.id);
 
       const ins = await env.DB.prepare(
