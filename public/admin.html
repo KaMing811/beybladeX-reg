@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>主辦後台</title>
   <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .tabs { display:flex; gap:0.5rem; margin:1rem 0; border-bottom:1px solid #334155; }
+    .tab { padding:0.6rem 1.2rem; background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:0.95rem; border-bottom:2px solid transparent; }
+    .tab.active { color:#f97316; border-bottom-color:#f97316; font-weight:600; }
+    .tab-content { display:none; }
+    .tab-content.active { display:block; }
+  </style>
 </head>
 <body>
   <div class="wrap">
@@ -40,21 +47,36 @@
         <button class="btn ghost" id="reload" type="button">重新整理</button>
       </div>
       <div id="eventEditor" class="card hidden"></div>
-      <div class="card" style="overflow:auto">
-        <h3 id="regTitle">報名名單</h3>
-        <div id="regs"></div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="regs">報名名單</button>
+        <button class="tab" data-tab="draw">正選抽選</button>
+        <button class="tab" data-tab="bracket">淘汰賽</button>
       </div>
 
-      <div class="card" id="drawCard" style="margin-top:1.5rem">
-        <h3>正選抽選</h3>
-        <div id="drawControls"></div>
-        <div id="drawAnim" style="margin:1rem 0; min-height:64px; font-size:1.5rem; text-align:center; font-weight:700;"></div>
-        <div id="drawResult"></div>
-        <div id="drawHistory" style="margin-top:1rem"></div>
-        <div style="margin-top:1rem">
-          <button class="btn" id="genBracket" type="button">用最近抽選生成淘汰賽</button>
+      <div id="tab-regs" class="tab-content active">
+        <div class="card" style="overflow:auto">
+          <h3 id="regTitle">報名名單</h3>
+          <div id="regs"></div>
         </div>
-        <div id="bracketArea" style="margin-top:1rem"></div>
+      </div>
+
+      <div id="tab-draw" class="tab-content">
+        <div class="card">
+          <h3>正選抽選</h3>
+          <div id="drawControls"></div>
+          <div id="drawAnim" style="margin:1rem 0; min-height:64px; font-size:1.5rem; text-align:center; font-weight:700;"></div>
+          <div id="drawResult"></div>
+          <div id="drawHistory" style="margin-top:1rem"></div>
+        </div>
+      </div>
+
+      <div id="tab-bracket" class="tab-content">
+        <div class="card">
+          <h3>淘汰賽</h3>
+          <button class="btn" id="genBracket" type="button">用最近抽選生成淘汰賽</button>
+          <div id="bracketArea" style="margin-top:1rem"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -67,6 +89,16 @@
     const statusFilter = document.getElementById("statusFilter");
     const editor = document.getElementById("eventEditor");
     let events = [];
+
+    // Tab switching
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.onclick = () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+        tab.classList.add("active");
+        document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
+      };
+    });
 
     function authed() { return !!localStorage.getItem("beyx_admin"); }
 
@@ -345,7 +377,7 @@
             </label>
           `).join("")}
         </div>
-        
+        <p class="lede" style="margin-top:0.5rem">手動加入：喺報名名單撳「加入抽選」會強制列入結果</p>
       `;
 
       document.getElementById("selectAllStatus").onclick = () => {
