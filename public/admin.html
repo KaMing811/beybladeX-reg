@@ -51,6 +51,10 @@
         <div id="drawAnim" style="margin:1rem 0; min-height:64px; font-size:1.5rem; text-align:center; font-weight:700;"></div>
         <div id="drawResult"></div>
         <div id="drawHistory" style="margin-top:1rem"></div>
+        <div style="margin-top:1rem">
+          <button class="btn" id="genBracket" type="button">用最近抽選生成淘汰賽</button>
+        </div>
+        <div id="bracketArea" style="margin-top:1rem"></div>
       </div>
     </div>
   </div>
@@ -328,7 +332,7 @@
             </label>
           `).join("")}
         </div>
-
+        <p class="lede" style="margin-top:0.5rem">手動加入：喺上面報名名單撳「加入抽選」會強制列入今次候選池</p>
       `;
 
       document.getElementById("selectAllStatus").onclick = () => {
@@ -370,14 +374,23 @@
             i++;
           }, 70);
 
-          setTimeout(() => {
+          setTimeout(async () => {
             clearInterval(timer);
             const winnerNames = data.selected.map(s => s.name).join("、");
             anim.innerHTML = `<span style="color:#16a34a">抽中：${winnerNames}</span>`;
+
+            const { registrations } = await api("/api/admin/registrations?event_id=" + eventId);
+            const regMap = {};
+            (registrations || []).forEach(r => { regMap[r.id] = r; });
+
             document.getElementById("drawResult").innerHTML = `
               <p><strong>結果（${data.selected.length} 人）：</strong></p>
-              <ul style="margin:0.3rem 0 0 1.2rem;">
-                ${data.selected.map(s => `<li>${s.name} <span class="lede">（${s.status}）</span></li>`).join("")}
+              <ul style="margin:0.3rem 0 0 1.2rem; line-height:1.6;">
+                ${data.selected.map(s => {
+                  const r = regMap[s.id];
+                  const phone = r?.whatsapp || "";
+                  return `<li><strong>${s.name}</strong>　${phone}</li>`;
+                }).join("")}
               </ul>
             `;
             localStorage.removeItem(manualKey(eventId));
@@ -405,16 +418,68 @@
           box.innerHTML = "<p class='lede'>未有抽選記錄</p>";
           return;
         }
-        box.innerHTML = `<h4 style="margin:0 0 0.4rem">最近抽選</h4>` +
-          draws.slice(0, 8).map(d => {
-            const results = JSON.parse(d.result_ids || "[]");
-            const st = JSON.parse(d.statuses || "[]").join(", ");
-            return `<p class="lede" style="margin:0.2rem 0">${(d.created_at || "").slice(0, 16)} · 抽 ${d.count_needed} 個 · status: ${st} · 結果 ID: ${results.join(", ")}</p>`;
-          }).join("");
-      } catch (_) {
-        box.innerHTML = "";
+
+        const latest = draws[0];
+        const resultIds = JSON.parse(latest.result_ids || "[]");
+        const statuses = JSON.parse(latest.statuses || "[]").join(", ");
+
+        const { registrations } = await api("/api/admin/registrations?event_id=" + eventFilter.value);
+        const regMap = {};
+        (registrations || []).forEach(r => { regMap[r.id] = r; });
+
+        const listHtml = resultIds.map(id => {
+          const r = regMap[id];
+          if (!r) return `<li>未知</li>`;
+          return `<li><strong>${r.display_name}</strong>　${r.whatsapp}</li>`;
+        }).join("");
+
+        box.innerHTML = `
+          <h4 style="margin:0 0 0.5rem">最近一次抽選</h4>
+          <p class="lede" style="margin:0 0 0.4rem">
+            ${(latest.created_at || "").slice(0, 16)} · 抽 ${latest.count_needed} 個 · status: ${statuses}
+          </p>
+          <ul style="margin:0; padding-left:1.2rem; line-height:1.6;">
+            ${listHtml}
+          </ul>
+        `;
+      } catch (err) {
+        box.innerHTML = "<p class='lede'>載入抽選記錄失敗</p>";
       }
     }
+
+    async function generateBracket() {
+      if (!eventFilter.value) return alert("請先揀比賽");
+      if (!confirm("用最近一次抽選結果生成淘汰賽？")) return;
+
+      try {
+        const data = await api("/api/admin/brackets", {
+          method: "POST",
+          body: { event_id: Number(eventFilter.value) },
+        });
+
+        const box = document.getElementById("bracketArea");
+        let html = `<h3>淘汰賽名單（${data.players.length} 人，${data.byes} 個 bye）</h3>`;
+
+        data.rounds.forEach((round, ri) => {
+          const roundName = ri === 0 ? "第一輪" :
+                            ri === data.rounds.length - 1 ? "決賽" :
+                            `第 ${ri + 1} 輪`;
+          html += `<h4>${roundName}</h4><ul style="line-height:1.6;">`;
+          round.forEach((m, mi) => {
+            const p1 = m.p1 ? `${m.p1.name} ${m.p1.phone || ""}` : "BYE";
+            const p2 = m.p2 ? `${m.p2.name} ${m.p2.phone || ""}` : "BYE";
+            html += `<li>Match ${mi + 1}：${p1} vs ${p2}</li>`;
+          });
+          html += `</ul>`;
+        });
+
+        box.innerHTML = html;
+      } catch (err) {
+        alert(err.message || "生成失敗");
+      }
+    }
+
+    document.getElementById("genBracket").onclick = generateBracket;
 
     async function boot() {
       const data = await api("/api/admin/events");
