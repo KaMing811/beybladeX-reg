@@ -434,7 +434,7 @@
         }).join("");
 
         box.innerHTML = `
-          <h4 style="margin:0 0 0.5rem">最近一次抽選</h4>
+          <h4 style="margin:0 0 0.5rem">抽選結果</h4>
           <p class="lede" style="margin:0 0 0.4rem">
             ${(latest.created_at || "").slice(0, 16)} · 抽 ${latest.count_needed} 個 · status: ${statuses}
           </p>
@@ -449,7 +449,7 @@
 
     async function generateBracket() {
       if (!eventFilter.value) return alert("請先揀比賽");
-      if (!confirm("用最近一次抽選結果生成淘汰賽？")) return;
+      if (!confirm("用抽選結果生成淘汰賽？")) return;
 
       try {
         const data = await api("/api/admin/brackets", {
@@ -458,21 +458,43 @@
         });
 
         const box = document.getElementById("bracketArea");
-        let html = `<h3>淘汰賽名單（${data.players.length} 人，${data.byes} 個 bye）</h3>`;
+        const rounds = data.rounds;
 
-        data.rounds.forEach((round, ri) => {
+        let html = `
+          <h3 style="margin-bottom:1rem">淘汰賽名單（${data.players.length} 人，${data.byes} 個 bye）</h3>
+          <div style="display:flex; gap:1.5rem; overflow-x:auto; padding-bottom:1rem;">
+        `;
+
+        rounds.forEach((round, ri) => {
           const roundName = ri === 0 ? "第一輪" :
-                            ri === data.rounds.length - 1 ? "決賽" :
+                            ri === rounds.length - 1 ? "決賽" :
                             `第 ${ri + 1} 輪`;
-          html += `<h4>${roundName}</h4><ul style="line-height:1.6;">`;
-          round.forEach((m, mi) => {
-            const p1 = m.p1 ? `${m.p1.name} ${m.p1.phone || ""}` : "BYE";
-            const p2 = m.p2 ? `${m.p2.name} ${m.p2.phone || ""}` : "BYE";
-            html += `<li>Match ${mi + 1}：${p1} vs ${p2}</li>`;
+
+          html += `
+            <div style="min-width:220px; flex-shrink:0;">
+              <div style="font-weight:700; margin-bottom:0.8rem; text-align:center; color:#f97316;">${roundName}</div>
+              <div style="display:flex; flex-direction:column; gap:0.6rem;">
+          `;
+
+          round.forEach((m) => {
+            const p1 = m.p1 ? `${m.p1.name}<br><span style="font-size:0.8rem; opacity:0.7">${m.p1.phone || ""}</span>` : "<span style='opacity:0.5'>BYE</span>";
+            const p2 = m.p2 ? `${m.p2.name}<br><span style="font-size:0.8rem; opacity:0.7">${m.p2.phone || ""}</span>` : "<span style='opacity:0.5'>BYE</span>";
+
+            html += `
+              <div style="background:#1e2937; border:1px solid #334155; border-radius:8px; padding:0.6rem 0.7rem; font-size:0.9rem;">
+                <div style="padding:0.25rem 0; border-bottom:1px solid #334155;">${p1}</div>
+                <div style="padding:0.25rem 0;">${p2}</div>
+              </div>
+            `;
           });
-          html += `</ul>`;
+
+          html += `
+              </div>
+            </div>
+          `;
         });
 
+        html += `</div>`;
         box.innerHTML = html;
       } catch (err) {
         alert(err.message || "生成失敗");
