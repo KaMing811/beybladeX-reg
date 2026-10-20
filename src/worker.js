@@ -363,14 +363,14 @@ async function handleApi(request, env) {
       if (!eventId) return error("缺少比賽");
 
       const placeholders = statuses.map(() => "?").join(",");
-      let sql = `SELECT id, display_name, status FROM registrations
-                 WHERE event_id = ? AND status IN (${placeholders})`;
+      let sql = `SELECT id, display_name, status FROM registrations WHERE event_id = ? AND (status IN (${placeholders})`;
       const binds = [eventId, ...statuses];
 
       if (manualInclude.length) {
         sql += ` OR id IN (${manualInclude.map(() => "?").join(",")})`;
         binds.push(...manualInclude);
       }
+      sql += ")";
 
       const candidates = await env.DB.prepare(sql).bind(...binds).all();
       const pool = candidates.results || [];
