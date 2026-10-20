@@ -240,7 +240,7 @@
         <tbody>
           ${registrations.map(r => `
             <tr>
-              <td>${(r.created_at || "").replace("T"," ").slice(0,16)}</td>
+              <td>${formatHKT(r.created_at)}</td>
               <td><strong>${r.display_name}</strong><br>${r.real_name || ""}<br><span class="lede">${r.notes || ""}</span></td>
               <td>${r.whatsapp}</td>
               <td>${r.category || ""}</td>
@@ -293,6 +293,7 @@
         };
       });
     }
+    
 
     const ALL_STATUSES = [
       { v: "pending", l: "pending（待確認）" },
@@ -306,6 +307,19 @@
     function manualKey(eventId) {
       return "draw_manual_" + eventId;
     }
+    function formatHKT(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return (iso || "").replace("T", " ").slice(0, 16);
+  // 轉 UTC+8
+  const hkt = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+  const y = hkt.getUTCFullYear();
+  const m = String(hkt.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(hkt.getUTCDate()).padStart(2, "0");
+  const hh = String(hkt.getUTCHours()).padStart(2, "0");
+  const mm = String(hkt.getUTCMinutes()).padStart(2, "0");
+  return `${y}-${m}-${day} ${hh}:${mm}`;
+}
 
     async function loadDrawUI() {
       const box = document.getElementById("drawControls");
@@ -462,7 +476,7 @@
 
         let html = `
           <h3 style="margin-bottom:1rem">淘汰賽名單（${data.players.length} 人，${data.byes} 個 bye）</h3>
-          <div style="display:flex; gap:1.5rem; overflow-x:auto; padding-bottom:1rem;">
+          <div style="display:flex; gap:0; overflow-x:auto; padding-bottom:1rem; align-items:flex-start;">
         `;
 
         rounds.forEach((round, ri) => {
@@ -471,19 +485,25 @@
                             `第 ${ri + 1} 輪`;
 
           html += `
-            <div style="min-width:220px; flex-shrink:0;">
-              <div style="font-weight:700; margin-bottom:0.8rem; text-align:center; color:#f97316;">${roundName}</div>
-              <div style="display:flex; flex-direction:column; gap:0.6rem;">
+            <div style="min-width:240px; flex-shrink:0; position:relative; padding-right:40px;">
+              <div style="font-weight:700; margin-bottom:1rem; text-align:center; color:#f97316;">${roundName}</div>
+              <div style="display:flex; flex-direction:column; gap:12px; position:relative;">
           `;
 
-          round.forEach((m) => {
-            const p1 = m.p1 ? `${m.p1.name}<br><span style="font-size:0.8rem; opacity:0.7">${m.p1.phone || ""}</span>` : "<span style='opacity:0.5'>BYE</span>";
-            const p2 = m.p2 ? `${m.p2.name}<br><span style="font-size:0.8rem; opacity:0.7">${m.p2.phone || ""}</span>` : "<span style='opacity:0.5'>BYE</span>";
+          round.forEach((m, mi) => {
+            const p1 = m.p1 ? `${m.p1.name}<br><span style="font-size:0.75rem; opacity:0.65">${m.p1.phone || ""}</span>` : "<span style='opacity:0.45'>BYE</span>";
+            const p2 = m.p2 ? `${m.p2.name}<br><span style="font-size:0.75rem; opacity:0.65">${m.p2.phone || ""}</span>` : "<span style='opacity:0.45'>BYE</span>";
 
             html += `
-              <div style="background:#1e2937; border:1px solid #334155; border-radius:8px; padding:0.6rem 0.7rem; font-size:0.9rem;">
-                <div style="padding:0.25rem 0; border-bottom:1px solid #334155;">${p1}</div>
-                <div style="padding:0.25rem 0;">${p2}</div>
+              <div style="background:#1e2937; border:1px solid #475569; border-radius:8px; padding:0.55rem 0.7rem; font-size:0.88rem; position:relative;">
+                <div style="padding:0.2rem 0; border-bottom:1px solid #334155;">${p1}</div>
+                <div style="padding:0.2rem 0;">${p2}</div>
+                ${ri < rounds.length - 1 ? `
+                  <div style="position:absolute; right:-40px; top:50%; width:40px; height:2px; background:#64748b; transform:translateY(-50%);"></div>
+                  ${mi % 2 === 0 ? `
+                    <div style="position:absolute; right:-40px; top:50%; width:2px; height:calc(100% + 12px); background:#64748b;"></div>
+                  ` : ""}
+                ` : ""}
               </div>
             `;
           });
