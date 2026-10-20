@@ -32,11 +32,11 @@
     </form>
 
     <div id="app" class="hidden">
-      <div class="toolbar">
+      <div class="toolbar" style="flex-wrap:wrap; gap:0.6rem; align-items:center;">
         <button class="btn" id="newEvent" type="button">開新比賽</button>
-        <button class="btn ghost" id="editEvent" type="button">編輯所選比賽</button>
-        <select id="eventFilter"></select>
-        <select id="statusFilter">
+        <button class="btn ghost" id="editEvent" type="button">編輯</button>
+        <select id="eventFilter" style="min-width:220px;"></select>
+        <select id="statusFilter" style="min-width:140px;">
           <option value="">全部狀態</option>
           <option value="pending">待確認</option>
           <option value="confirmed">已確認待付款</option>
@@ -90,7 +90,6 @@
     const editor = document.getElementById("eventEditor");
     let events = [];
 
-    // Tab switching
     document.querySelectorAll(".tab").forEach(tab => {
       tab.onclick = () => {
         document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
