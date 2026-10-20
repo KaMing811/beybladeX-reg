@@ -6,6 +6,8 @@
   <title>主辦後台</title>
   <link rel="stylesheet" href="/styles.css" />
   <style>
+    .toolbar { display:flex; flex-wrap:wrap; gap:0.6rem; align-items:center; }
+    .toolbar select { width:auto; min-width:160px; }
     .tabs { display:flex; gap:0.5rem; margin:1rem 0; border-bottom:1px solid #334155; }
     .tab { padding:0.6rem 1.2rem; background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:0.95rem; border-bottom:2px solid transparent; }
     .tab.active { color:#f97316; border-bottom-color:#f97316; font-weight:600; }
@@ -32,11 +34,11 @@
     </form>
 
     <div id="app" class="hidden">
-      <div class="toolbar" style="flex-wrap:wrap; gap:0.6rem; align-items:center;">
+      <div class="toolbar">
         <button class="btn" id="newEvent" type="button">開新比賽</button>
         <button class="btn ghost" id="editEvent" type="button">編輯</button>
-        <select id="eventFilter" style="min-width:220px;"></select>
-        <select id="statusFilter" style="min-width:140px;">
+        <select id="eventFilter"></select>
+        <select id="statusFilter">
           <option value="">全部狀態</option>
           <option value="pending">待確認</option>
           <option value="confirmed">已確認待付款</option>
@@ -360,7 +362,7 @@
       const eventId = eventFilter.value;
 
       box.innerHTML = `
-        <div class="toolbar" style="flex-wrap:wrap; gap:0.6rem; align-items:center;">
+        <div class="toolbar">
           <label>抽幾個
             <input type="number" id="drawCount" value="8" min="1" style="width:70px">
           </label>
@@ -376,7 +378,7 @@
             </label>
           `).join("")}
         </div>
-        
+        <p class="lede" style="margin-top:0.5rem">手動加入：喺報名名單撳「加入抽選」會強制列入結果</p>
       `;
 
       document.getElementById("selectAllStatus").onclick = () => {
@@ -492,14 +494,15 @@
           </div>
         `;
 
-       listBox.innerHTML = resultIds.map(id => {
-  const r = regMap[id];
-  const name = r ? `${r.display_name}　${r.whatsapp}` : `ID ${id}`;
-  return `<label style="display:flex; align-items:center; gap:0.6rem; margin:0.35rem 0; cursor:pointer;">
-    <input type="checkbox" class="dq-chk" value="${id}" style="width:18px; height:18px; flex-shrink:0;">
-    <span>${name}</span>
-  </label>`;
-}).join("");
+        const listBox = document.getElementById("disqualifyList");
+        listBox.innerHTML = resultIds.map(id => {
+          const r = regMap[id];
+          const name = r ? `${r.display_name}　${r.whatsapp}` : `ID ${id}`;
+          return `<label style="display:flex; align-items:center; gap:0.6rem; margin:0.35rem 0; cursor:pointer;">
+            <input type="checkbox" class="dq-chk" value="${id}" style="width:18px; height:18px; flex-shrink:0;">
+            <span>${name}</span>
+          </label>`;
+        }).join("");
 
         document.getElementById("doReplace").onclick = async () => {
           const removeIds = [...document.querySelectorAll(".dq-chk:checked")].map(el => Number(el.value));
