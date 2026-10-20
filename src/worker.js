@@ -39,78 +39,6 @@ async function eventCounts(db, eventId) {
     .all();
   return countsFromRows(raw.results);
 }
-// ===== Draw APIs =====
-if (path === "/api/admin/draws" && method === "POST") {
-  const denied = await requireAdmin(ctx);
-  if (denied) return denied;
-  const body = await readJson(request);
-  if (!body) return error("無效資料");
-
-  const eventId = Number(body.event_id);
-  const countNeeded = Math.max(1, Number(body.count) || 1);
-  const statuses = Array.isArray(body.statuses) && body.statuses.length
-    ? body.statuses
-    : ["paid"];
-  const manualInclude = Array.isArray(body.manual_include)
-    ? body.manual_include.map(Number).filter(Boolean)
-    : [];
-
-  if (!eventId) return error("缺少比賽");
-
-  const placeholders = statuses.map(() => "?").join(",");
-  let sql = `SELECT id, display_name, status FROM registrations
-             WHERE event_id = ? AND status IN (${placeholders})`;
-  const binds = [eventId, ...statuses];
-
-  if (manualInclude.length) {
-    sql += ` OR id IN (${manualInclude.map(() => "?").join(",")})`;
-    binds.push(...manualInclude);
-  }
-
-  const candidates = await env.DB.prepare(sql).bind(...binds).all();
-  const pool = candidates.results || [];
-
-  if (pool.length === 0) return error("冇符合條件嘅選手");
-  if (countNeeded > pool.length) return error(`只得 ${pool.length} 人，唔夠抽 ${countNeeded} 個`);
-
-  // Fisher-Yates 洗牌
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-  const selected = pool.slice(0, countNeeded);
-  const resultIds = selected.map(r => r.id);
-
-  const ins = await env.DB.prepare(
-    `INSERT INTO draws (event_id, count_needed, statuses, manual_include, result_ids, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).bind(
-    eventId,
-    countNeeded,
-    JSON.stringify(statuses),
-    JSON.stringify(manualInclude),
-    JSON.stringify(resultIds),
-    nowIso()
-  ).run();
-
-  return json({
-    ok: true,
-    draw_id: ins.meta.last_row_id,
-    candidates: pool.map(r => ({ id: r.id, name: r.display_name, status: r.status })),
-    selected: selected.map(r => ({ id: r.id, name: r.display_name, status: r.status })),
-  });
-}
-
-if (path === "/api/admin/draws" && method === "GET") {
-  const denied = await requireAdmin(ctx);
-  if (denied) return denied;
-  const eventId = url.searchParams.get("event_id");
-  if (!eventId) return error("缺少 event_id");
-  const rows = await env.DB.prepare(
-    "SELECT * FROM draws WHERE event_id = ? ORDER BY id DESC LIMIT 20"
-  ).bind(Number(eventId)).all();
-  return json({ ok: true, draws: rows.results || [] });
-}
 
 async function handleApi(request, env) {
   await ensureColumns(env.DB);
@@ -340,10 +268,12 @@ async function handleApi(request, env) {
             }
             poster_url = `data:${mime};base64,${btoa(bin)}`;
           } else {
-            return error("未綁定 R2。細圖（450KB 內）可以直接上傳；大圖請貼公開圖片網址，或喺 Dashboard 綁 R2（Variable name: POSTERS）。");
+            return error("未開 R2 時請上傳小於 450KB 嘅圖片，或提供圖片網址");
           }
-        } else {
+        } else if (urlField) {
           poster_url = urlField;
+        } else {
+          return error("請提供海報檔案或網址");
         }
       }
       try {
@@ -412,6 +342,78 @@ async function handleApi(request, env) {
       const updated = await env.DB.prepare("SELECT * FROM registrations WHERE id = ?").bind(id).first();
       const event = await env.DB.prepare("SELECT * FROM events WHERE id = ?").bind(row.event_id).first();
       return json({ ok: true, registration: updated, wa_message: buildWhatsappMessage(event, updated) });
+    }
+
+    // ===== Draw APIs =====
+    if (path === "/api/admin/draws" && method === "POST") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const body = await readJson(request);
+      if (!body) return error("無效資料");
+
+      const eventId = Number(body.event_id);
+      const countNeeded = Math.max(1, Number(body.count) || 1);
+      const statuses = Array.isArray(body.statuses) && body.statuses.length
+        ? body.statuses
+        : ["paid"];
+      const manualInclude = Array.isArray(body.manual_include)
+        ? body.manual_include.map(Number).filter(Boolean)
+        : [];
+
+      if (!eventId) return error("缺少比賽");
+
+      const placeholders = statuses.map(() => "?").join(",");
+      let sql = `SELECT id, display_name, status FROM registrations
+                 WHERE event_id = ? AND status IN (${placeholders})`;
+      const binds = [eventId, ...statuses];
+
+      if (manualInclude.length) {
+        sql += ` OR id IN (${manualInclude.map(() => "?").join(",")})`;
+        binds.push(...manualInclude);
+      }
+
+      const candidates = await env.DB.prepare(sql).bind(...binds).all();
+      const pool = candidates.results || [];
+
+      if (pool.length === 0) return error("冇符合條件嘅選手");
+      if (countNeeded > pool.length) return error(`只得 ${pool.length} 人，唔夠抽 ${countNeeded} 個`);
+
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      const selected = pool.slice(0, countNeeded);
+      const resultIds = selected.map(r => r.id);
+
+      const ins = await env.DB.prepare(
+        `INSERT INTO draws (event_id, count_needed, statuses, manual_include, result_ids, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).bind(
+        eventId,
+        countNeeded,
+        JSON.stringify(statuses),
+        JSON.stringify(manualInclude),
+        JSON.stringify(resultIds),
+        nowIso()
+      ).run();
+
+      return json({
+        ok: true,
+        draw_id: ins.meta.last_row_id,
+        candidates: pool.map(r => ({ id: r.id, name: r.display_name, status: r.status })),
+        selected: selected.map(r => ({ id: r.id, name: r.display_name, status: r.status })),
+      });
+    }
+
+    if (path === "/api/admin/draws" && method === "GET") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const eventId = url.searchParams.get("event_id");
+      if (!eventId) return error("缺少 event_id");
+      const rows = await env.DB.prepare(
+        "SELECT * FROM draws WHERE event_id = ? ORDER BY id DESC LIMIT 20"
+      ).bind(Number(eventId)).all();
+      return json({ ok: true, draws: rows.results || [] });
     }
 
     return error("API 不存在", 404);
