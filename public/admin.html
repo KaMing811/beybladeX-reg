@@ -52,7 +52,7 @@
         <div id="drawResult"></div>
         <div id="drawHistory" style="margin-top:1rem"></div>
         <div style="margin-top:1rem">
-          <button class="btn" id="genBracket" type="button">抽選淘汰賽</button>
+          <button class="btn" id="genBracket" type="button">用最近抽選生成淘汰賽</button>
         </div>
         <div id="bracketArea" style="margin-top:1rem"></div>
       </div>
@@ -215,6 +215,19 @@
       };
     }
 
+    function formatHKT(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return (iso || "").replace("T", " ").slice(0, 16);
+      const hkt = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+      const y = hkt.getUTCFullYear();
+      const m = String(hkt.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(hkt.getUTCDate()).padStart(2, "0");
+      const hh = String(hkt.getUTCHours()).padStart(2, "0");
+      const mm = String(hkt.getUTCMinutes()).padStart(2, "0");
+      return `${y}-${m}-${day} ${hh}:${mm}`;
+    }
+
     async function loadRegs() {
       const qs = new URLSearchParams();
       if (!eventFilter.value) {
@@ -293,7 +306,6 @@
         };
       });
     }
-    
 
     const ALL_STATUSES = [
       { v: "pending", l: "pending（待確認）" },
@@ -307,19 +319,6 @@
     function manualKey(eventId) {
       return "draw_manual_" + eventId;
     }
-    function formatHKT(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return (iso || "").replace("T", " ").slice(0, 16);
-  // 轉 UTC+8
-  const hkt = new Date(d.getTime() + 8 * 60 * 60 * 1000);
-  const y = hkt.getUTCFullYear();
-  const m = String(hkt.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(hkt.getUTCDate()).padStart(2, "0");
-  const hh = String(hkt.getUTCHours()).padStart(2, "0");
-  const mm = String(hkt.getUTCMinutes()).padStart(2, "0");
-  return `${y}-${m}-${day} ${hh}:${mm}`;
-}
 
     async function loadDrawUI() {
       const box = document.getElementById("drawControls");
@@ -346,7 +345,7 @@
             </label>
           `).join("")}
         </div>
-        <p class="lede" style="margin-top:0.5rem"></p>
+        <p class="lede" style="margin-top:0.5rem">手動加入：喺上面報名名單撳「加入抽選」會強制列入結果</p>
       `;
 
       document.getElementById("selectAllStatus").onclick = () => {
@@ -448,14 +447,45 @@
         }).join("");
 
         box.innerHTML = `
-          <h4 style="margin:0 0 0.5rem">抽選結果</h4>
+          <h4 style="margin:0 0 0.5rem">最近一次抽選</h4>
           <p class="lede" style="margin:0 0 0.4rem">
             ${(latest.created_at || "").slice(0, 16)} · 抽 ${latest.count_needed} 個 · status: ${statuses}
           </p>
           <ul style="margin:0; padding-left:1.2rem; line-height:1.6;">
             ${listHtml}
           </ul>
+          <div style="margin-top:0.8rem">
+            <p class="lede">剔選資格不符嘅人，然後補位：</p>
+            <div id="disqualifyList" style="margin:0.4rem 0"></div>
+            <button class="btn small" id="doReplace" type="button">移除並補位</button>
+          </div>
         `;
+
+        const listBox = document.getElementById("disqualifyList");
+        listBox.innerHTML = resultIds.map(id => {
+          const r = regMap[id];
+          const name = r ? `${r.display_name} ${r.whatsapp}` : `ID ${id}`;
+          return `<label style="display:block; margin:0.2rem 0">
+            <input type="checkbox" class="dq-chk" value="${id}"> ${name}
+          </label>`;
+        }).join("");
+
+        document.getElementById("doReplace").onclick = async () => {
+          const removeIds = [...document.querySelectorAll(".dq-chk:checked")].map(el => Number(el.value));
+          if (!removeIds.length) return alert("請先剔選要移除嘅人");
+          if (!confirm(`確定移除 ${removeIds.length} 人並補位？`)) return;
+
+          try {
+            const data = await api(`/api/admin/draws/${latest.id}/replace`, {
+              method: "POST",
+              body: { remove_ids: removeIds },
+            });
+            alert(`已移除 ${data.removed} 人，補入 ${data.added.length} 人`);
+            loadDrawHistory();
+          } catch (err) {
+            alert(err.message || "補位失敗");
+          }
+        };
       } catch (err) {
         box.innerHTML = "<p class='lede'>載入抽選記錄失敗</p>";
       }
@@ -463,7 +493,7 @@
 
     async function generateBracket() {
       if (!eventFilter.value) return alert("請先揀比賽");
-      if (!confirm("用抽選結果生成淘汰賽？")) return;
+      if (!confirm("用最近一次抽選結果生成淘汰賽？")) return;
 
       try {
         const data = await api("/api/admin/brackets", {
