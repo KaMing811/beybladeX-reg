@@ -44,13 +44,14 @@
         <h3 id="regTitle">報名名單</h3>
         <div id="regs"></div>
       </div>
+
       <div class="card" id="drawCard" style="margin-top:1.5rem">
-  <h3>正選抽選</h3>
-  <div id="drawControls"></div>
-  <div id="drawAnim" style="margin:1rem 0; min-height:64px; font-size:1.5rem; text-align:center; font-weight:700; color:#111;"></div>
-  <div id="drawResult"></div>
-  <div id="drawHistory" style="margin-top:1rem"></div>
-</div>
+        <h3>正選抽選</h3>
+        <div id="drawControls"></div>
+        <div id="drawAnim" style="margin:1rem 0; min-height:64px; font-size:1.5rem; text-align:center; font-weight:700;"></div>
+        <div id="drawResult"></div>
+        <div id="drawHistory" style="margin-top:1rem"></div>
+      </div>
     </div>
   </div>
   <script type="module">
@@ -275,145 +276,145 @@
         };
       });
       box.querySelectorAll("[data-add-draw]").forEach(btn => {
-  btn.onclick = () => {
-    const eventId = eventFilter.value;
-    if (!eventId) return;
-    const key = manualKey(eventId);
-    const arr = JSON.parse(localStorage.getItem(key) || "[]");
-    const id = Number(btn.dataset.addDraw);
-    if (!arr.includes(id)) arr.push(id);
-    localStorage.setItem(key, JSON.stringify(arr));
-    btn.textContent = "已加入";
-    btn.disabled = true;
-  };
-});
-    }
-    const ALL_STATUSES = [
-  { v: "pending", l: "pending（待確認）" },
-  { v: "confirmed", l: "confirmed（已確認）" },
-  { v: "paid", l: "paid（已付款）" },
-  { v: "waitlist", l: "waitlist（候補）" },
-  { v: "rejected", l: "rejected（未獲接納）" },
-  { v: "cancelled", l: "cancelled（已取消）" },
-];
-
-function manualKey(eventId) {
-  return "draw_manual_" + eventId;
-}
-
-async function loadDrawUI() {
-  const box = document.getElementById("drawControls");
-  if (!eventFilter.value) {
-    box.innerHTML = "<p class='lede'>請先揀一場比賽</p>";
-    return;
-  }
-  const eventId = eventFilter.value;
-
-  box.innerHTML = `
-    <div class="toolbar" style="flex-wrap:wrap; gap:0.6rem; align-items:center;">
-      <label>抽幾個
-        <input type="number" id="drawCount" value="8" min="1" style="width:70px">
-      </label>
-      <button class="btn small ghost" id="selectAllStatus" type="button">全選</button>
-      <button class="btn small ghost" id="clearStatus" type="button">清除</button>
-      <button class="btn" id="startDraw" type="button">開始抽選</button>
-    </div>
-    <div style="margin-top:0.6rem; display:flex; flex-wrap:wrap; gap:0.8rem;">
-      ${ALL_STATUSES.map(s => `
-        <label style="display:inline-flex; align-items:center; gap:0.3rem;">
-          <input type="checkbox" class="status-chk" value="${s.v}" ${s.v === "paid" ? "checked" : ""}>
-          ${s.l}
-        </label>
-      `).join("")}
-    </div>
-    <p class="lede" style="margin-top:0.5rem">手動加入：喺上面報名名單撳「加入抽選」會強制列入今次候選池</p>
-  `;
-
-  document.getElementById("selectAllStatus").onclick = () => {
-    document.querySelectorAll(".status-chk").forEach(el => el.checked = true);
-  };
-  document.getElementById("clearStatus").onclick = () => {
-    document.querySelectorAll(".status-chk").forEach(el => el.checked = false);
-  };
-
-  document.getElementById("startDraw").onclick = async () => {
-    const count = Number(document.getElementById("drawCount").value) || 1;
-    const checked = [...document.querySelectorAll(".status-chk:checked")].map(el => el.value);
-    if (!checked.length) return alert("至少揀一個 status");
-
-    const manual = JSON.parse(localStorage.getItem(manualKey(eventId)) || "[]");
-    const anim = document.getElementById("drawAnim");
-    anim.textContent = "準備中...";
-
-    try {
-      const data = await api("/api/admin/draws", {
-        method: "POST",
-        body: {
-          event_id: Number(eventId),
-          count,
-          statuses: checked,
-          manual_include: manual,
-        },
+        btn.onclick = () => {
+          const eventId = eventFilter.value;
+          if (!eventId) return;
+          const key = manualKey(eventId);
+          const arr = JSON.parse(localStorage.getItem(key) || "[]");
+          const id = Number(btn.dataset.addDraw);
+          if (!arr.includes(id)) arr.push(id);
+          localStorage.setItem(key, JSON.stringify(arr));
+          btn.textContent = "已加入";
+          btn.disabled = true;
+        };
       });
+    }
 
-      const names = data.candidates.map(c => c.name);
-      if (!names.length) {
-        anim.textContent = "冇候選";
+    const ALL_STATUSES = [
+      { v: "pending", l: "pending（待確認）" },
+      { v: "confirmed", l: "confirmed（已確認）" },
+      { v: "paid", l: "paid（已付款）" },
+      { v: "waitlist", l: "waitlist（候補）" },
+      { v: "rejected", l: "rejected（未獲接納）" },
+      { v: "cancelled", l: "cancelled（已取消）" },
+    ];
+
+    function manualKey(eventId) {
+      return "draw_manual_" + eventId;
+    }
+
+    async function loadDrawUI() {
+      const box = document.getElementById("drawControls");
+      if (!eventFilter.value) {
+        box.innerHTML = "<p class='lede'>請先揀一場比賽</p>";
         return;
       }
+      const eventId = eventFilter.value;
 
-      let i = 0;
-      const timer = setInterval(() => {
-        anim.textContent = names[i % names.length];
-        i++;
-      }, 70);
+      box.innerHTML = `
+        <div class="toolbar" style="flex-wrap:wrap; gap:0.6rem; align-items:center;">
+          <label>抽幾個
+            <input type="number" id="drawCount" value="8" min="1" style="width:70px">
+          </label>
+          <button class="btn small ghost" id="selectAllStatus" type="button">全選</button>
+          <button class="btn small ghost" id="clearStatus" type="button">清除</button>
+          <button class="btn" id="startDraw" type="button">開始抽選</button>
+        </div>
+        <div style="margin-top:0.6rem; display:flex; flex-wrap:wrap; gap:0.8rem;">
+          ${ALL_STATUSES.map(s => `
+            <label style="display:inline-flex; align-items:center; gap:0.3rem;">
+              <input type="checkbox" class="status-chk" value="${s.v}" ${s.v === "paid" ? "checked" : ""}>
+              ${s.l}
+            </label>
+          `).join("")}
+        </div>
+        <p class="lede" style="margin-top:0.5rem">手動加入：喺上面報名名單撳「加入抽選」會強制列入今次候選池</p>
+      `;
 
-      setTimeout(() => {
-        clearInterval(timer);
-        const winnerNames = data.selected.map(s => s.name).join("、");
-        anim.innerHTML = `<span style="color:#16a34a">抽中：${winnerNames}</span>`;
-        document.getElementById("drawResult").innerHTML = `
-          <p><strong>結果（${data.selected.length} 人）：</strong></p>
-          <ul style="margin:0.3rem 0 0 1.2rem;">
-            ${data.selected.map(s => `<li>${s.name} <span class="lede">（${s.status}）</span></li>`).join("")}
-          </ul>
-        `;
-        localStorage.removeItem(manualKey(eventId));
-        loadDrawHistory();
-        // 重新整理報名名單，方便再加「加入抽選」
-        loadRegs();
-      }, 2200);
-    } catch (err) {
-      anim.textContent = "";
-      alert(err.message || "抽選失敗");
+      document.getElementById("selectAllStatus").onclick = () => {
+        document.querySelectorAll(".status-chk").forEach(el => el.checked = true);
+      };
+      document.getElementById("clearStatus").onclick = () => {
+        document.querySelectorAll(".status-chk").forEach(el => el.checked = false);
+      };
+
+      document.getElementById("startDraw").onclick = async () => {
+        const count = Number(document.getElementById("drawCount").value) || 1;
+        const checked = [...document.querySelectorAll(".status-chk:checked")].map(el => el.value);
+        if (!checked.length) return alert("至少揀一個 status");
+
+        const manual = JSON.parse(localStorage.getItem(manualKey(eventId)) || "[]");
+        const anim = document.getElementById("drawAnim");
+        anim.textContent = "準備中...";
+
+        try {
+          const data = await api("/api/admin/draws", {
+            method: "POST",
+            body: {
+              event_id: Number(eventId),
+              count,
+              statuses: checked,
+              manual_include: manual,
+            },
+          });
+
+          const names = data.candidates.map(c => c.name);
+          if (!names.length) {
+            anim.textContent = "冇候選";
+            return;
+          }
+
+          let i = 0;
+          const timer = setInterval(() => {
+            anim.textContent = names[i % names.length];
+            i++;
+          }, 70);
+
+          setTimeout(() => {
+            clearInterval(timer);
+            const winnerNames = data.selected.map(s => s.name).join("、");
+            anim.innerHTML = `<span style="color:#16a34a">抽中：${winnerNames}</span>`;
+            document.getElementById("drawResult").innerHTML = `
+              <p><strong>結果（${data.selected.length} 人）：</strong></p>
+              <ul style="margin:0.3rem 0 0 1.2rem;">
+                ${data.selected.map(s => `<li>${s.name} <span class="lede">（${s.status}）</span></li>`).join("")}
+              </ul>
+            `;
+            localStorage.removeItem(manualKey(eventId));
+            loadDrawHistory();
+            loadRegs();
+          }, 2200);
+        } catch (err) {
+          anim.textContent = "";
+          alert(err.message || "抽選失敗");
+        }
+      };
+
+      loadDrawHistory();
     }
-  };
 
-  loadDrawHistory();
-}
-
-async function loadDrawHistory() {
-  const box = document.getElementById("drawHistory");
-  if (!eventFilter.value) {
-    box.innerHTML = "";
-    return;
-  }
-  try {
-    const { draws } = await api("/api/admin/draws?event_id=" + eventFilter.value);
-    if (!draws?.length) {
-      box.innerHTML = "<p class='lede'>未有抽選記錄</p>";
-      return;
+    async function loadDrawHistory() {
+      const box = document.getElementById("drawHistory");
+      if (!eventFilter.value) {
+        box.innerHTML = "";
+        return;
+      }
+      try {
+        const { draws } = await api("/api/admin/draws?event_id=" + eventFilter.value);
+        if (!draws?.length) {
+          box.innerHTML = "<p class='lede'>未有抽選記錄</p>";
+          return;
+        }
+        box.innerHTML = `<h4 style="margin:0 0 0.4rem">最近抽選</h4>` +
+          draws.slice(0, 8).map(d => {
+            const results = JSON.parse(d.result_ids || "[]");
+            const st = JSON.parse(d.statuses || "[]").join(", ");
+            return `<p class="lede" style="margin:0.2rem 0">${(d.created_at || "").slice(0, 16)} · 抽 ${d.count_needed} 個 · status: ${st} · 結果 ID: ${results.join(", ")}</p>`;
+          }).join("");
+      } catch (_) {
+        box.innerHTML = "";
+      }
     }
-    box.innerHTML = `<h4 style="margin:0 0 0.4rem">最近抽選</h4>` +
-      draws.slice(0, 8).map(d => {
-        const results = JSON.parse(d.result_ids || "[]");
-        const st = JSON.parse(d.statuses || "[]").join(", ");
-        return `<p class="lede" style="margin:0.2rem 0">${(d.created_at || "").slice(0, 16)} · 抽 ${d.count_needed} 個 · status: ${st} · 結果 ID: ${results.join(", ")}</p>`;
-      }).join("");
-  } catch (_) {
-    box.innerHTML = "";
-  }
-}
 
     async function boot() {
       const data = await api("/api/admin/events");
@@ -427,6 +428,7 @@ async function loadDrawHistory() {
         : `<option value="">未有比賽</option>`;
       if (keep && events.some((e) => String(e.id) === String(keep))) eventFilter.value = keep;
       await loadRegs();
+      await loadDrawUI();
     }
 
     document.getElementById("newEvent").onclick = () => renderEditor({});
@@ -436,7 +438,7 @@ async function loadDrawHistory() {
       else alert("請先揀一場比賽");
     };
     document.getElementById("reload").onclick = boot;
-    eventFilter.onchange = loadRegs;
+    eventFilter.onchange = () => { loadRegs(); loadDrawUI(); };
     statusFilter.onchange = loadRegs;
 
     if (authed()) {
