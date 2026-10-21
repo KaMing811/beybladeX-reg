@@ -77,6 +77,10 @@
         <div class="card">
           <h3>淘汰賽</h3>
           <button class="btn" id="genBracket" type="button">用最近抽選生成淘汰賽</button>
+          <div style="margin-top:0.8rem">
+  <button class="btn ghost" id="loadBrackets" type="button">載入已儲存淘汰賽</button>
+  <div id="savedBrackets" style="margin-top:0.6rem"></div>
+</div>
           <div id="bracketArea" style="margin-top:1rem"></div>
         </div>
       </div>
@@ -91,6 +95,55 @@
     const statusFilter = document.getElementById("statusFilter");
     const editor = document.getElementById("eventEditor");
     let events = [];
+    document.getElementById("loadBrackets").onclick = async () => {
+  if (!eventFilter.value) return alert("請先揀比賽");
+  const box = document.getElementById("savedBrackets");
+  box.innerHTML = "<p class='lede'>載入中...</p>";
+
+  try {
+    const { brackets } = await api("/api/admin/brackets?event_id=" + eventFilter.value);
+    if (!brackets?.length) {
+      box.innerHTML = "<p class='lede'>未有已儲存淘汰賽</p>";
+      return;
+    }
+
+    box.innerHTML = brackets.map(b => `
+      <div style="padding:0.6rem; border:1px solid #334155; border-radius:6px; margin-bottom:0.4rem; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <strong>淘汰賽 #${b.id}</strong>
+          <span class="lede">　${(b.created_at || "").slice(0, 16)}</span>
+        </div>
+        <button class="btn small" data-load-bracket="${b.id}">載入</button>
+      </div>
+    `).join("");
+
+    box.querySelectorAll("[data-load-bracket]").forEach(btn => {
+      btn.onclick = () => loadSavedBracket(Number(btn.dataset.loadBracket));
+    });
+  } catch (err) {
+    box.innerHTML = "<p class='lede'>載入失敗</p>";
+  }
+};
+
+async function loadSavedBracket(bracketId) {
+  try {
+    const { brackets } = await api("/api/admin/brackets?event_id=" + eventFilter.value);
+    const b = brackets.find(x => x.id === bracketId);
+    if (!b) return alert("搵唔到");
+
+    const players = JSON.parse(b.players || "[]");
+    const rounds = JSON.parse(b.rounds || "[]");
+
+    // 重用你而家嘅顯示邏輯（或者用 SVG 版）
+    const box = document.getElementById("bracketArea");
+    // 下面可以貼你而家 generateBracket 入面顯示 rounds 嘅代碼
+    // 或者簡單顯示
+    box.innerHTML = `<h3>已載入淘汰賽 #${b.id}</h3><p class="lede">${players.length} 人</p>`;
+    // 如果你有 SVG 版本，可以喺度重用顯示邏輯
+  } catch (err) {
+    alert(err.message || "載入失敗");
+  }
+}
 
     document.querySelectorAll(".tab").forEach(tab => {
       tab.onclick = () => {
