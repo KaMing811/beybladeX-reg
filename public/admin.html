@@ -127,63 +127,55 @@
 function renderBracket(rounds, title) {
   const box = document.getElementById("bracketArea");
   const totalRounds = rounds.length;
-  const matchW = 160;
-  const matchH = 50;
-  const gapY = 16;
-  const connW = 40;
+  const matchW = 150;
+  const matchH = 48;
+  const gapY = 12;
+  const connW = 36;
 
-  // 計算左邊半區（前半輪）同右邊半區
-  const leftRounds = Math.ceil(totalRounds / 2);
-  const rightRounds = totalRounds - leftRounds;
-
-  let svgW = (matchW + connW) * totalRounds + 100;
-  let svgH = rounds[0].length * (matchH + gapY) + 80;
+  // 計算整體高度（以第一輪為準）
+  const baseCount = rounds[0].length;
+  const svgH = baseCount * (matchH + gapY) + 100;
+  const svgW = (matchW + connW) * totalRounds + 40;
 
   let html = `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
       <h3 style="margin:0">${title}</h3>
       <button class="btn small" id="exportPdf">Export PDF</button>
     </div>
-    <div id="printableBracket" style="overflow-x:auto;">
-      <svg width="${svgW}" height="${svgH}" style="background:#0f172a; border-radius:8px;">
+    <div id="printableBracket" style="overflow-x:auto; background:#0f172a; border-radius:8px; padding:1rem;">
+      <svg width="${svgW}" height="${svgH}">
+        <text x="${svgW/2}" y="28" fill="#f97316" font-size="15" font-weight="700" text-anchor="middle">${title}</text>
   `;
 
-  // 標題
-  html += `<text x="${svgW/2}" y="30" fill="#f97316" font-size="16" font-weight="700" text-anchor="middle">${title}</text>`;
-
   rounds.forEach((round, ri) => {
-    const isLeft = ri < leftRounds;
-    const x = isLeft 
-      ? ri * (matchW + connW) + 20
-      : svgW - (totalRounds - ri) * (matchW + connW) - 20;
-
-    const spacing = Math.pow(2, Math.min(ri, totalRounds - 1 - ri)) * (matchH + gapY);
+    const x = 20 + ri * (matchW + connW);
+    const spacing = Math.pow(2, ri) * (matchH + gapY);
+    const offset = (spacing - matchH) / 2;
 
     round.forEach((m, mi) => {
-      const y = 60 + mi * spacing + (spacing - matchH) / 2;
+      const y = 50 + mi * spacing + offset;
 
       const p1 = m.p1 ? m.p1.name : "BYE";
       const p2 = m.p2 ? m.p2.name : "BYE";
 
-      // 比賽框
       html += `
         <rect x="${x}" y="${y}" width="${matchW}" height="${matchH}" rx="4" fill="#1e2937" stroke="#475569"/>
-        <text x="${x + 8}" y="${y + 18}" fill="#e2e8f0" font-size="12">${p1}</text>
-        <line x1="${x + 6}" y1="${y + 25}" x2="${x + matchW - 6}" y2="${y + 25}" stroke="#334155"/>
-        <text x="${x + 8}" y="${y + 42}" fill="#e2e8f0" font-size="12">${p2}</text>
+        <text x="${x + 8}" y="${y + 17}" fill="#e2e8f0" font-size="11">${p1}</text>
+        <line x1="${x + 6}" y1="${y + 24}" x2="${x + matchW - 6}" y2="${y + 24}" stroke="#334155"/>
+        <text x="${x + 8}" y="${y + 40}" fill="#e2e8f0" font-size="11">${p2}</text>
       `;
 
       // 連接線
       if (ri < totalRounds - 1) {
-        const nextMi = Math.floor(mi / 2);
-        const nextSpacing = Math.pow(2, Math.min(ri + 1, totalRounds - 2 - ri)) * (matchH + gapY);
-        const nextY = 60 + nextMi * nextSpacing + (nextSpacing - matchH) / 2 + matchH / 2;
-        const midX = isLeft ? x + matchW + connW / 2 : x - connW / 2;
+        const nextSpacing = Math.pow(2, ri + 1) * (matchH + gapY);
+        const nextOffset = (nextSpacing - matchH) / 2;
+        const nextY = 50 + Math.floor(mi / 2) * nextSpacing + nextOffset + matchH / 2;
+        const midX = x + matchW + connW / 2;
 
         html += `
-          <line x1="${isLeft ? x + matchW : x}" y1="${y + matchH/2}" x2="${midX}" y2="${y + matchH/2}" stroke="#64748b" stroke-width="1.5"/>
+          <line x1="${x + matchW}" y1="${y + matchH/2}" x2="${midX}" y2="${y + matchH/2}" stroke="#64748b" stroke-width="1.5"/>
           <line x1="${midX}" y1="${y + matchH/2}" x2="${midX}" y2="${nextY}" stroke="#64748b" stroke-width="1.5"/>
-          <line x1="${midX}" y1="${nextY}" x2="${isLeft ? x + matchW + connW : x - connW}" y2="${nextY}" stroke="#64748b" stroke-width="1.5"/>
+          <line x1="${midX}" y1="${nextY}" x2="${x + matchW + connW}" y2="${nextY}" stroke="#64748b" stroke-width="1.5"/>
         `;
       }
     });
