@@ -124,81 +124,87 @@
     box.innerHTML = "<p class='lede'>載入失敗</p>";
   }
 };
+function renderBracket(rounds, title) {
+  const box = document.getElementById("bracketArea");
+  let html = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <h3 style="margin:0">${title}</h3>
+      <button class="btn small" id="exportPdf">Export PDF</button>
+    </div>
+    <div id="printableBracket">
+      <div style="display:flex; gap:0; overflow-x:auto; padding-bottom:1rem; align-items:flex-start;">
+  `;
 
+  rounds.forEach((round, ri) => {
+    const roundName = ri === 0 ? "第一輪" :
+                      ri === rounds.length - 1 ? "決賽" :
+                      `第 ${ri + 1} 輪`;
+
+    html += `
+      <div style="min-width:240px; flex-shrink:0; position:relative; padding-right:40px;">
+        <div style="font-weight:700; margin-bottom:1rem; text-align:center; color:#f97316;">${roundName}</div>
+        <div style="display:flex; flex-direction:column; gap:12px; position:relative;">
+    `;
+
+    round.forEach((m, mi) => {
+      const p1 = m.p1 ? `${m.p1.name}<br><span style="font-size:0.75rem; opacity:0.65">${m.p1.phone || ""}</span>` : "<span style='opacity:0.45'>BYE</span>";
+      const p2 = m.p2 ? `${m.p2.name}<br><span style="font-size:0.75rem; opacity:0.65">${m.p2.phone || ""}</span>` : "<span style='opacity:0.45'>BYE</span>";
+
+      html += `
+        <div style="background:#1e2937; border:1px solid #475569; border-radius:8px; padding:0.55rem 0.7rem; font-size:0.88rem; position:relative;">
+          <div style="padding:0.2rem 0; border-bottom:1px solid #334155;">${p1}</div>
+          <div style="padding:0.2rem 0;">${p2}</div>
+          ${ri < rounds.length - 1 ? `
+            <div style="position:absolute; right:-40px; top:50%; width:40px; height:2px; background:#64748b; transform:translateY(-50%);"></div>
+            ${mi % 2 === 0 ? `
+              <div style="position:absolute; right:-40px; top:50%; width:2px; height:calc(100% + 12px); background:#64748b;"></div>
+            ` : ""}
+          ` : ""}
+        </div>
+      `;
+    });
+
+    html += `
+        </div>
+      </div>
+    `;
+  });
+
+  html += `</div></div>`;
+  box.innerHTML = html;
+
+  document.getElementById("exportPdf").onclick = () => {
+    const printWin = window.open("", "_blank");
+    printWin.document.write(`
+      <html>
+        <head>
+          <title>${title}</title>
+          <style>
+            body { font-family: -apple-system, sans-serif; padding: 20px; background: #0f172a; color: #e2e8f0; }
+            h3 { color: #f97316; }
+          </style>
+        </head>
+        <body>
+          <h3>${title}</h3>
+          ${document.getElementById("printableBracket").innerHTML}
+        </body>
+      </html>
+    `);
+    printWin.document.close();
+    printWin.focus();
+    setTimeout(() => printWin.print(), 400);
+  };
+}
 async function loadSavedBracket(bracketId) {
   try {
     const { brackets } = await api("/api/admin/brackets?event_id=" + eventFilter.value);
     const b = brackets.find(x => x.id === bracketId);
     if (!b) return alert("搵唔到");
 
-    const players = JSON.parse(b.players || "[]");
     const rounds = JSON.parse(b.rounds || "[]");
+    const players = JSON.parse(b.players || "[]");
 
-    const box = document.getElementById("bracketArea");
-
-    let html = `
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-        <h3 style="margin:0">淘汰賽 #${b.id}（${players.length} 人，${b.byes || 0} 個 bye）</h3>
-        <button class="btn small" id="exportPdf">Export PDF</button>
-      </div>
-      <div id="printableBracket">
-        <div style="display:flex; gap:1.5rem; overflow-x:auto; padding-bottom:1rem; align-items:flex-start;">
-    `;
-
-    rounds.forEach((round, ri) => {
-      const roundName = ri === 0 ? "第一輪" :
-                        ri === rounds.length - 1 ? "決賽" :
-                        `第 ${ri + 1} 輪`;
-
-      html += `
-        <div style="min-width:220px; flex-shrink:0; position:relative; padding-right:30px;">
-          <div style="font-weight:700; margin-bottom:1rem; text-align:center; color:#f97316;">${roundName}</div>
-          <div style="display:flex; flex-direction:column; gap:12px;">
-      `;
-
-      round.forEach((m, mi) => {
-        const p1 = m.p1 ? `${m.p1.name}<br><span style="font-size:0.75rem; opacity:0.65">${m.p1.phone || ""}</span>` : "<span style='opacity:0.45'>BYE</span>";
-        const p2 = m.p2 ? `${m.p2.name}<br><span style="font-size:0.75rem; opacity:0.65">${m.p2.phone || ""}</span>` : "<span style='opacity:0.45'>BYE</span>";
-
-        html += `
-          <div style="background:#1e2937; border:1px solid #475569; border-radius:8px; padding:0.55rem 0.7rem; font-size:0.88rem;">
-            <div style="padding:0.2rem 0; border-bottom:1px solid #334155;">${p1}</div>
-            <div style="padding:0.2rem 0;">${p2}</div>
-          </div>
-        `;
-      });
-
-      html += `
-          </div>
-        </div>
-      `;
-    });
-
-    html += `</div></div>`;
-    box.innerHTML = html;
-
-    // Export PDF
-    document.getElementById("exportPdf").onclick = () => {
-      const printWin = window.open("", "_blank");
-      printWin.document.write(`
-        <html>
-          <head>
-            <title>淘汰賽 #${b.id}</title>
-            <style>
-              body { font-family: -apple-system, sans-serif; padding: 20px; background: #0f172a; color: #e2e8f0; }
-              h3 { color: #f97316; }
-            </style>
-          </head>
-          <body>
-            <h3>淘汰賽 #${b.id}（${players.length} 人）</h3>
-            ${document.getElementById("printableBracket").innerHTML}
-          </body>
-        </html>
-      `);
-      printWin.document.close();
-      printWin.focus();
-      setTimeout(() => printWin.print(), 400);
-    };
+    renderBracket(rounds, `淘汰賽 #${b.id}（${players.length} 人）`);
   } catch (err) {
     alert(err.message || "載入失敗");
   }
