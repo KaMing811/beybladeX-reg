@@ -126,51 +126,70 @@
 };
 function renderBracket(rounds, title) {
   const box = document.getElementById("bracketArea");
+  const totalRounds = rounds.length;
+  const matchW = 160;
+  const matchH = 50;
+  const gapY = 16;
+  const connW = 40;
+
+  // 計算左邊半區（前半輪）同右邊半區
+  const leftRounds = Math.ceil(totalRounds / 2);
+  const rightRounds = totalRounds - leftRounds;
+
+  let svgW = (matchW + connW) * totalRounds + 100;
+  let svgH = rounds[0].length * (matchH + gapY) + 80;
+
   let html = `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
       <h3 style="margin:0">${title}</h3>
       <button class="btn small" id="exportPdf">Export PDF</button>
     </div>
-    <div id="printableBracket">
-      <div style="display:flex; gap:0; overflow-x:auto; padding-bottom:1rem; align-items:flex-start;">
+    <div id="printableBracket" style="overflow-x:auto;">
+      <svg width="${svgW}" height="${svgH}" style="background:#0f172a; border-radius:8px;">
   `;
 
-  rounds.forEach((round, ri) => {
-    const roundName = ri === 0 ? "第一輪" :
-                      ri === rounds.length - 1 ? "決賽" :
-                      `第 ${ri + 1} 輪`;
+  // 標題
+  html += `<text x="${svgW/2}" y="30" fill="#f97316" font-size="16" font-weight="700" text-anchor="middle">${title}</text>`;
 
-    html += `
-      <div style="min-width:240px; flex-shrink:0; position:relative; padding-right:40px;">
-        <div style="font-weight:700; margin-bottom:1rem; text-align:center; color:#f97316;">${roundName}</div>
-        <div style="display:flex; flex-direction:column; gap:12px; position:relative;">
-    `;
+  rounds.forEach((round, ri) => {
+    const isLeft = ri < leftRounds;
+    const x = isLeft 
+      ? ri * (matchW + connW) + 20
+      : svgW - (totalRounds - ri) * (matchW + connW) - 20;
+
+    const spacing = Math.pow(2, Math.min(ri, totalRounds - 1 - ri)) * (matchH + gapY);
 
     round.forEach((m, mi) => {
-      const p1 = m.p1 ? `${m.p1.name}<br><span style="font-size:0.75rem; opacity:0.65">${m.p1.phone || ""}</span>` : "<span style='opacity:0.45'>BYE</span>";
-      const p2 = m.p2 ? `${m.p2.name}<br><span style="font-size:0.75rem; opacity:0.65">${m.p2.phone || ""}</span>` : "<span style='opacity:0.45'>BYE</span>";
+      const y = 60 + mi * spacing + (spacing - matchH) / 2;
 
+      const p1 = m.p1 ? m.p1.name : "BYE";
+      const p2 = m.p2 ? m.p2.name : "BYE";
+
+      // 比賽框
       html += `
-        <div style="background:#1e2937; border:1px solid #475569; border-radius:8px; padding:0.55rem 0.7rem; font-size:0.88rem; position:relative;">
-          <div style="padding:0.2rem 0; border-bottom:1px solid #334155;">${p1}</div>
-          <div style="padding:0.2rem 0;">${p2}</div>
-          ${ri < rounds.length - 1 ? `
-            <div style="position:absolute; right:-40px; top:50%; width:40px; height:2px; background:#64748b; transform:translateY(-50%);"></div>
-            ${mi % 2 === 0 ? `
-              <div style="position:absolute; right:-40px; top:50%; width:2px; height:calc(100% + 12px); background:#64748b;"></div>
-            ` : ""}
-          ` : ""}
-        </div>
+        <rect x="${x}" y="${y}" width="${matchW}" height="${matchH}" rx="4" fill="#1e2937" stroke="#475569"/>
+        <text x="${x + 8}" y="${y + 18}" fill="#e2e8f0" font-size="12">${p1}</text>
+        <line x1="${x + 6}" y1="${y + 25}" x2="${x + matchW - 6}" y2="${y + 25}" stroke="#334155"/>
+        <text x="${x + 8}" y="${y + 42}" fill="#e2e8f0" font-size="12">${p2}</text>
       `;
-    });
 
-    html += `
-        </div>
-      </div>
-    `;
+      // 連接線
+      if (ri < totalRounds - 1) {
+        const nextMi = Math.floor(mi / 2);
+        const nextSpacing = Math.pow(2, Math.min(ri + 1, totalRounds - 2 - ri)) * (matchH + gapY);
+        const nextY = 60 + nextMi * nextSpacing + (nextSpacing - matchH) / 2 + matchH / 2;
+        const midX = isLeft ? x + matchW + connW / 2 : x - connW / 2;
+
+        html += `
+          <line x1="${isLeft ? x + matchW : x}" y1="${y + matchH/2}" x2="${midX}" y2="${y + matchH/2}" stroke="#64748b" stroke-width="1.5"/>
+          <line x1="${midX}" y1="${y + matchH/2}" x2="${midX}" y2="${nextY}" stroke="#64748b" stroke-width="1.5"/>
+          <line x1="${midX}" y1="${nextY}" x2="${isLeft ? x + matchW + connW : x - connW}" y2="${nextY}" stroke="#64748b" stroke-width="1.5"/>
+        `;
+      }
+    });
   });
 
-  html += `</div></div>`;
+  html += `</svg></div>`;
   box.innerHTML = html;
 
   document.getElementById("exportPdf").onclick = () => {
@@ -179,20 +198,14 @@ function renderBracket(rounds, title) {
       <html>
         <head>
           <title>${title}</title>
-          <style>
-            body { font-family: -apple-system, sans-serif; padding: 20px; background: #0f172a; color: #e2e8f0; }
-            h3 { color: #f97316; }
-          </style>
+          <style>body { margin:0; background:#0f172a; }</style>
         </head>
-        <body>
-          <h3>${title}</h3>
-          ${document.getElementById("printableBracket").innerHTML}
-        </body>
+        <body>${document.getElementById("printableBracket").innerHTML}</body>
       </html>
     `);
     printWin.document.close();
     printWin.focus();
-    setTimeout(() => printWin.print(), 400);
+    setTimeout(() => printWin.print(), 500);
   };
 }
 async function loadSavedBracket(bracketId) {
