@@ -135,61 +135,69 @@ async function loadSavedBracket(bracketId) {
     const rounds = JSON.parse(b.rounds || "[]");
 
     const box = document.getElementById("bracketArea");
+
     let html = `
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-        <h3 style="margin:0">淘汰賽 #${b.id}（${players.length} 人）</h3>
+        <h3 style="margin:0">淘汰賽 #${b.id}（${players.length} 人，${b.byes || 0} 個 bye）</h3>
         <button class="btn small" id="exportPdf">Export PDF</button>
       </div>
       <div id="printableBracket">
+        <div style="display:flex; gap:1.5rem; overflow-x:auto; padding-bottom:1rem; align-items:flex-start;">
     `;
 
-    // 用簡單清晰嘅卡片顯示（你可以換成 SVG 版）
-    html += `<div style="display:flex; gap:1.5rem; overflow-x:auto; padding-bottom:1rem;">`;
     rounds.forEach((round, ri) => {
-      const roundName = ri === 0 ? "第一輪" : ri === rounds.length - 1 ? "決賽" : `第 ${ri + 1} 輪`;
+      const roundName = ri === 0 ? "第一輪" :
+                        ri === rounds.length - 1 ? "決賽" :
+                        `第 ${ri + 1} 輪`;
+
       html += `
-        <div style="min-width:200px; flex-shrink:0;">
-          <div style="font-weight:700; text-align:center; color:#f97316; margin-bottom:0.8rem;">${roundName}</div>
-          <div style="display:flex; flex-direction:column; gap:0.6rem;">
+        <div style="min-width:220px; flex-shrink:0; position:relative; padding-right:30px;">
+          <div style="font-weight:700; margin-bottom:1rem; text-align:center; color:#f97316;">${roundName}</div>
+          <div style="display:flex; flex-direction:column; gap:12px;">
       `;
-      round.forEach(m => {
-        const p1 = m.p1 ? `${m.p1.name}<br><span style="font-size:0.75rem;opacity:0.65">${m.p1.phone||""}</span>` : "BYE";
-        const p2 = m.p2 ? `${m.p2.name}<br><span style="font-size:0.75rem;opacity:0.65">${m.p2.phone||""}</span>` : "BYE";
+
+      round.forEach((m, mi) => {
+        const p1 = m.p1 ? `${m.p1.name}<br><span style="font-size:0.75rem; opacity:0.65">${m.p1.phone || ""}</span>` : "<span style='opacity:0.45'>BYE</span>";
+        const p2 = m.p2 ? `${m.p2.name}<br><span style="font-size:0.75rem; opacity:0.65">${m.p2.phone || ""}</span>` : "<span style='opacity:0.45'>BYE</span>";
+
         html += `
-          <div style="background:#1e2937; border:1px solid #475569; border-radius:6px; padding:0.5rem 0.6rem; font-size:0.85rem;">
+          <div style="background:#1e2937; border:1px solid #475569; border-radius:8px; padding:0.55rem 0.7rem; font-size:0.88rem;">
             <div style="padding:0.2rem 0; border-bottom:1px solid #334155;">${p1}</div>
             <div style="padding:0.2rem 0;">${p2}</div>
           </div>
         `;
       });
-      html += `</div></div>`;
-    });
-    html += `</div></div>`;
 
+      html += `
+          </div>
+        </div>
+      `;
+    });
+
+    html += `</div></div>`;
     box.innerHTML = html;
 
     // Export PDF
     document.getElementById("exportPdf").onclick = () => {
-      const printContent = document.getElementById("printableBracket").innerHTML;
-      const win = window.open("", "_blank");
-      win.document.write(`
+      const printWin = window.open("", "_blank");
+      printWin.document.write(`
         <html>
           <head>
             <title>淘汰賽 #${b.id}</title>
             <style>
-              body { font-family: sans-serif; padding: 20px; }
-              h3 { margin-bottom: 1rem; }
+              body { font-family: -apple-system, sans-serif; padding: 20px; background: #0f172a; color: #e2e8f0; }
+              h3 { color: #f97316; }
             </style>
           </head>
           <body>
             <h3>淘汰賽 #${b.id}（${players.length} 人）</h3>
-            ${printContent}
+            ${document.getElementById("printableBracket").innerHTML}
           </body>
         </html>
       `);
-      win.document.close();
-      win.focus();
-      setTimeout(() => win.print(), 300);
+      printWin.document.close();
+      printWin.focus();
+      setTimeout(() => printWin.print(), 400);
     };
   } catch (err) {
     alert(err.message || "載入失敗");
