@@ -37,6 +37,16 @@ a { color: var(--accent2); text-decoration: none; }
   box-shadow: 0 0 18px rgba(255,106,0,.6);
   animation: spin 4s linear infinite;
 }
+#list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
+.card {
+  display: flex;
+  flex-direction: column;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 .nav a.btn, .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
