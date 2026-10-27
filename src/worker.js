@@ -49,7 +49,7 @@ async function handleApi(request, env) {
 
   try {
     if (method === "GET" && path === "/api/events") {
-      const events = await env.DB.prepare("SELECT * FROM events ORDER BY event_date ASC, id ASC").all();
+      const events = await env.DB.prepare("SELECT * FROM events ORDER BY event_date DESC, id DESC").all();
       const out = [];
       for (const row of events.results || []) {
         out.push({ ...publicEvent(row), counts: await eventCounts(env.DB, row.id) });
