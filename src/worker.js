@@ -60,33 +60,7 @@ async function handleApi(request, env) {
   const ctx = { request, env };
 
   try {
-    // ===== Group APIs =====
-if (path === "/api/admin/groups" && method === "POST") {
-  const denied = await requireAdmin(ctx);
-  if (denied) return denied;
-  const body = await readJson(request);
-  if (!body) return error("無效資料");
-
-  const eventId = Number(body.event_id);
-  const groupSize = Number(body.group_size) || 4;
-  const statuses = Array.isArray(body.statuses) ? body.statuses : [];
-  const groups = Array.isArray(body.groups) ? body.groups : [];
-
-  if (!eventId || !groups.length) return error("缺少資料");
-
-  const ins = await env.DB.prepare(
-    `INSERT INTO groups (event_id, group_size, statuses, groups_json, created_at)
-     VALUES (?, ?, ?, ?, ?)`
-  ).bind(
-    eventId,
-    groupSize,
-    JSON.stringify(statuses),
-    JSON.stringify(groups),
-    nowIso()
-  ).run();
-
-  return json({ ok: true, group_id: ins.meta.last_row_id });
-}
+ 
     if (method === "GET" && path === "/api/events") {
       const events = await env.DB.prepare("SELECT * FROM events ORDER BY event_date DESC, id DESC").all();
       const out = [];
@@ -160,7 +134,33 @@ if (path === "/api/admin/groups" && method === "POST") {
           : "已收到報名，請等主辦確認。確認後先會提供付款方式。",
       });
     }
+       // ===== Group APIs =====
+if (path === "/api/admin/groups" && method === "POST") {
+  const denied = await requireAdmin(ctx);
+  if (denied) return denied;
+  const body = await readJson(request);
+  if (!body) return error("無效資料");
 
+  const eventId = Number(body.event_id);
+  const groupSize = Number(body.group_size) || 4;
+  const statuses = Array.isArray(body.statuses) ? body.statuses : [];
+  const groups = Array.isArray(body.groups) ? body.groups : [];
+
+  if (!eventId || !groups.length) return error("缺少資料");
+
+  const ins = await env.DB.prepare(
+    `INSERT INTO groups (event_id, group_size, statuses, groups_json, created_at)
+     VALUES (?, ?, ?, ?, ?)`
+  ).bind(
+    eventId,
+    groupSize,
+    JSON.stringify(statuses),
+    JSON.stringify(groups),
+    nowIso()
+  ).run();
+
+  return json({ ok: true, group_id: ins.meta.last_row_id });
+}
     if (method === "GET" && path === "/api/status") {
       const token = (url.searchParams.get("token") || "").trim();
       if (!token) return error("缺少 token");
