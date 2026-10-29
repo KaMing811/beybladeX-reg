@@ -543,6 +543,23 @@ async function loadSavedBracket(bracketId) {
         box.innerHTML = "<p class='lede'>未有報名。</p>";
         return;
       }
+      // 統計各狀態人數
+const counts = {};
+registrations.forEach(r => {
+  counts[r.status] = (counts[r.status] || 0) + 1;
+});
+const total = registrations.length;
+
+const countHtml = countHtml+`
+  <div style="display:flex; flex-wrap:wrap; gap:0.6rem; margin-bottom:0.8rem; font-size:0.85rem;">
+    <span class="pill">全部 ${total}</span>
+    <span class="pill">待確認 ${counts.pending || 0}</span>
+    <span class="pill">已確認 ${counts.confirmed || 0}</span>
+    <span class="pill">已付款 ${counts.paid || 0}</span>
+    <span class="pill">候補 ${counts.waitlist || 0}</span>
+    <span class="pill">未獲接納 ${counts.rejected || 0}</span>
+  </div>
+`;
       box.innerHTML = `<table>
         <thead><tr><th>時間</th><th>玩家</th><th>聯絡</th><th>組別</th><th>狀態</th><th>動作</th></tr></thead>
         <tbody>
