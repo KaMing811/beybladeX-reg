@@ -114,7 +114,6 @@ async function loadGroupUI() {
     return;
   }
 
-  // 先檢查有冇已儲存分組
   let saved = [];
   try {
     const data = await api("/api/admin/groups?event_id=" + eventFilter.value);
@@ -122,7 +121,6 @@ async function loadGroupUI() {
   } catch (_) {}
 
   if (saved.length > 0) {
-    // 已有分組 → 顯示最新結果 + 重新分組掣
     const latest = saved[0];
     const groupsData = JSON.parse(latest.groups_json || "[]");
 
@@ -134,20 +132,44 @@ async function loadGroupUI() {
     `;
 
     resultBox.innerHTML = `
-      <h4>最新分組（共 ${groupsData.length} 組）</h4>
-      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:1rem; margin-top:0.8rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem;">
+        <h4 style="margin:0">最新分組（共 ${groupsData.length} 組）</h4>
+        <button class="btn small" id="exportGroups">Export</button>
+      </div>
+      <div id="printableGroups" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:1rem;">
         ${groupsData.map((group, i) => `
           <div style="background:#1e2937; border:1px solid #475569; border-radius:8px; padding:0.8rem;">
-            <div style="font-weight:700; color:#f97316; margin-bottom:0.4rem;">第 ${i + 1} 組（${group.length} 人）</div>
+            <div style="font-weight:700; color:#f97316; margin-bottom:0.4rem;">${String.fromCharCode(65 + i)} 組（${group.length} 人）</div>
             ${group.map(p => `<div style="padding:0.2rem 0; font-size:0.9rem;">${p.name}　${p.phone}</div>`).join("")}
           </div>
         `).join("")}
       </div>
     `;
 
+    document.getElementById("exportGroups").onclick = () => {
+      const printWin = window.open("", "_blank");
+      printWin.document.write(`
+        <html>
+          <head>
+            <title>小組分組</title>
+            <style>
+              body { font-family: -apple-system, sans-serif; padding: 20px; background: #0f172a; color: #e2e8f0; }
+              h4 { color: #f97316; }
+            </style>
+          </head>
+          <body>
+            <h4>小組分組（共 ${groupsData.length} 組）</h4>
+            ${document.getElementById("printableGroups").innerHTML}
+          </body>
+        </html>
+      `);
+      printWin.document.close();
+      printWin.focus();
+      setTimeout(() => printWin.print(), 400);
+    };
+
     document.getElementById("reGroup").onclick = () => showGroupForm();
   } else {
-    // 未有分組 → 顯示分組表單
     showGroupForm();
   }
 
@@ -204,7 +226,7 @@ async function loadGroupUI() {
             groups: groupsData,
           },
         });
-        loadGroupUI(); // 重新載入，顯示已儲存結果
+        loadGroupUI();
       } catch (err) {
         alert("分組失敗：" + (err.message || ""));
       }
