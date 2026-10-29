@@ -523,104 +523,106 @@ async function loadSavedBracket(bracketId) {
       return `${y}-${m}-${day} ${hh}:${mm}`;
     }
 
-    async function loadRegs() {
-      const qs = new URLSearchParams();
-      if (!eventFilter.value) {
-        document.getElementById("regTitle").textContent = "報名名單";
-        document.getElementById("regs").innerHTML = "<p class='lede'>請先喺上面揀一場比賽。</p>";
-        return;
-      }
-      qs.set("event_id", eventFilter.value);
-      localStorage.setItem("beyx_admin_event", eventFilter.value);
-      const ev = events.find((e) => String(e.id) === eventFilter.value);
-      document.getElementById("regTitle").textContent = ev
-        ? `報名名單 — ${ev.title}`
-        : "報名名單";
-      if (statusFilter.value) qs.set("status", statusFilter.value);
-      const { registrations } = await api("/api/admin/registrations?" + qs.toString());
-      const box = document.getElementById("regs");
-      if (!registrations.length) {
-        box.innerHTML = "<p class='lede'>未有報名。</p>";
-        return;
-      }
-      // 統計各狀態人數
-const counts = {};
-registrations.forEach(r => {
-  counts[r.status] = (counts[r.status] || 0) + 1;
-});
-const total = registrations.length;
+   async function loadRegs() {
+  const qs = new URLSearchParams();
+  if (!eventFilter.value) {
+    document.getElementById("regTitle").textContent = "報名名單";
+    document.getElementById("regs").innerHTML = "<p class='lede'>請先喺上面揀一場比賽。</p>";
+    return;
+  }
+  qs.set("event_id", eventFilter.value);
+  localStorage.setItem("beyx_admin_event", eventFilter.value);
+  const ev = events.find((e) => String(e.id) === eventFilter.value);
+  document.getElementById("regTitle").textContent = ev
+    ? `報名名單 — ${ev.title}`
+    : "報名名單";
+  if (statusFilter.value) qs.set("status", statusFilter.value);
+  const { registrations } = await api("/api/admin/registrations?" + qs.toString());
+  const box = document.getElementById("regs");
+  if (!registrations.length) {
+    box.innerHTML = "<p class='lede'>未有報名。</p>";
+    return;
+  }
 
-const countHtml = countHtml+`
-  <div style="display:flex; flex-wrap:wrap; gap:0.6rem; margin-bottom:0.8rem; font-size:0.85rem;">
-    <span class="pill">全部 ${total}</span>
-    <span class="pill">待確認 ${counts.pending || 0}</span>
-    <span class="pill">已確認 ${counts.confirmed || 0}</span>
-    <span class="pill">已付款 ${counts.paid || 0}</span>
-    <span class="pill">候補 ${counts.waitlist || 0}</span>
-    <span class="pill">未獲接納 ${counts.rejected || 0}</span>
-  </div>
-`;
-      box.innerHTML = `<table>
-        <thead><tr><th>時間</th><th>玩家</th><th>聯絡</th><th>組別</th><th>狀態</th><th>動作</th></tr></thead>
-        <tbody>
-          ${registrations.map(r => `
-            <tr>
-              <td>${formatHKT(r.created_at)}</td>
-              <td><strong>${r.display_name}</strong><br>${r.real_name || ""}<br><span class="lede">${r.notes || ""}</span></td>
-              <td>${r.whatsapp}</td>
-              <td>${r.category || ""}</td>
-              <td>${statusPill(r.status)}<br><span class="lede">${r.paid_ref || ""}</span></td>
-              <td>
-                <div class="toolbar">
-                  <button class="btn small ok" data-act="confirmed" data-id="${r.id}">確認</button>
-                  <button class="btn small" data-act="paid" data-id="${r.id}">已收款</button>
-                  <button class="btn small warn" data-act="waitlist" data-id="${r.id}">候補</button>
-                  <button class="btn small bad" data-act="rejected" data-id="${r.id}">拒絕</button>
-                  <button class="btn small ghost" data-wa="${encodeURIComponent(r.whatsapp || "")}" data-msg="${encodeURIComponent(r.wa_message || "")}">開啟 WhatsApp</button>
-                  <button class="btn small ghost" data-add-draw="${r.id}">加入抽選</button>
-                </div>
-              </td>
-            </tr>`).join("")}
-        </tbody></table>`;
+  // 統計
+  const counts = {};
+  registrations.forEach(r => {
+    counts[r.status] = (counts[r.status] || 0) + 1;
+  });
+  const total = registrations.length;
+  const countHtml = `
+    <div style="display:flex; flex-wrap:wrap; gap:0.6rem; margin-bottom:0.8rem; font-size:0.85rem;">
+      <span class="pill">全部 ${total}</span>
+      <span class="pill">待確認 ${counts.pending || 0}</span>
+      <span class="pill">已確認 ${counts.confirmed || 0}</span>
+      <span class="pill">已付款 ${counts.paid || 0}</span>
+      <span class="pill">候補 ${counts.waitlist || 0}</span>
+      <span class="pill">未獲接納 ${counts.rejected || 0}</span>
+    </div>
+  `;
 
-      box.querySelectorAll("[data-act]").forEach(btn => {
-        btn.onclick = async () => {
-          let paid_ref = "";
-          if (btn.dataset.act === "paid") paid_ref = prompt("付款備註（可選，例如轉帳後4位）", "") || "";
-          const data = await api("/api/admin/registrations/" + btn.dataset.id, {
-            method: "PATCH",
-            body: { status: btn.dataset.act, paid_ref },
-          });
-          if (btn.dataset.act === "confirmed" && data.wa_message) {
-            await navigator.clipboard.writeText(data.wa_message).catch(() => {});
-            alert("已確認，WhatsApp 訊息已複製（如瀏覽器允許）。");
-          }
-          await loadRegs();
-        };
+  box.innerHTML = countHtml + `<table>
+    <thead><tr><th>時間</th><th>玩家</th><th>聯絡</th><th>組別</th><th>狀態</th><th>動作</th></tr></thead>
+    <tbody>
+      ${registrations.map(r => `
+        <tr>
+          <td>${formatHKT(r.created_at)}</td>
+          <td><strong>${r.display_name}</strong><br>${r.real_name || ""}<br><span class="lede">${r.notes || ""}</span></td>
+          <td>${r.whatsapp}</td>
+          <td>${r.category || ""}</td>
+          <td>${statusPill(r.status)}<br><span class="lede">${r.paid_ref || ""}</span></td>
+          <td>
+            <div class="toolbar">
+              <button class="btn small ok" data-act="confirmed" data-id="${r.id}">確認</button>
+              <button class="btn small" data-act="paid" data-id="${r.id}">已收款</button>
+              <button class="btn small warn" data-act="waitlist" data-id="${r.id}">候補</button>
+              <button class="btn small bad" data-act="rejected" data-id="${r.id}">拒絕</button>
+              <button class="btn small ghost" data-wa="${encodeURIComponent(r.whatsapp || "")}" data-msg="${encodeURIComponent(r.wa_message || "")}">開啟 WhatsApp</button>
+              <button class="btn small ghost" data-add-draw="${r.id}">加入抽選</button>
+            </div>
+          </td>
+        </tr>`).join("")}
+    </tbody></table>`;
+
+  // 之後嘅事件綁定保持不變
+  box.querySelectorAll("[data-act]").forEach(btn => {
+    btn.onclick = async () => {
+      let paid_ref = "";
+      if (btn.dataset.act === "paid") paid_ref = prompt("付款備註（可選，例如轉帳後4位）", "") || "";
+      const data = await api("/api/admin/registrations/" + btn.dataset.id, {
+        method: "PATCH",
+        body: { status: btn.dataset.act, paid_ref },
       });
-      box.querySelectorAll("[data-wa]").forEach(btn => {
-  btn.onclick = () => {
-    const phone = decodeURIComponent(btn.dataset.wa).replace(/\D/g, "");
-    const msg = decodeURIComponent(btn.dataset.msg);
-    if (!phone) return alert("冇電話號碼");
-    const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
-    window.open(url, "_blank");
-  };
-});
-      box.querySelectorAll("[data-add-draw]").forEach(btn => {
-        btn.onclick = () => {
-          const eventId = eventFilter.value;
-          if (!eventId) return;
-          const key = manualKey(eventId);
-          const arr = JSON.parse(localStorage.getItem(key) || "[]");
-          const id = Number(btn.dataset.addDraw);
-          if (!arr.includes(id)) arr.push(id);
-          localStorage.setItem(key, JSON.stringify(arr));
-          btn.textContent = "已加入";
-          btn.disabled = true;
-        };
-      });
-    }
+      if (btn.dataset.act === "confirmed" && data.wa_message) {
+        await navigator.clipboard.writeText(data.wa_message).catch(() => {});
+        alert("已確認，WhatsApp 訊息已複製（如瀏覽器允許）。");
+      }
+      await loadRegs();
+    };
+  });
+  box.querySelectorAll("[data-wa]").forEach(btn => {
+    btn.onclick = () => {
+      const phone = decodeURIComponent(btn.dataset.wa).replace(/\D/g, "");
+      const msg = decodeURIComponent(btn.dataset.msg);
+      if (!phone) return alert("冇電話號碼");
+      const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+      window.open(url, "_blank");
+    };
+  });
+  box.querySelectorAll("[data-add-draw]").forEach(btn => {
+    btn.onclick = () => {
+      const eventId = eventFilter.value;
+      if (!eventId) return;
+      const key = manualKey(eventId);
+      const arr = JSON.parse(localStorage.getItem(key) || "[]");
+      const id = Number(btn.dataset.addDraw);
+      if (!arr.includes(id)) arr.push(id);
+      localStorage.setItem(key, JSON.stringify(arr));
+      btn.textContent = "已加入";
+      btn.disabled = true;
+    };
+  });
+}
 
     const ALL_STATUSES = [
       { v: "pending", l: "pending（待確認）" },
