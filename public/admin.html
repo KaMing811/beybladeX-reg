@@ -420,7 +420,7 @@ async function loadSavedBracket(bracketId) {
                   <button class="btn small" data-act="paid" data-id="${r.id}">已收款</button>
                   <button class="btn small warn" data-act="waitlist" data-id="${r.id}">候補</button>
                   <button class="btn small bad" data-act="rejected" data-id="${r.id}">拒絕</button>
-                  <button class="btn small ghost" data-copy="${encodeURIComponent(r.wa_message || "")}">複製 WhatsApp</button>
+                  <button class="btn small ghost" data-wa="${encodeURIComponent(r.whatsapp || "")}" data-msg="${encodeURIComponent(r.wa_message || "")}">開啟 WhatsApp</button>
                   <button class="btn small ghost" data-add-draw="${r.id}">加入抽選</button>
                 </div>
               </td>
@@ -442,12 +442,15 @@ async function loadSavedBracket(bracketId) {
           await loadRegs();
         };
       });
-      box.querySelectorAll("[data-copy]").forEach(btn => {
-        btn.onclick = async () => {
-          await navigator.clipboard.writeText(decodeURIComponent(btn.dataset.copy));
-          btn.textContent = "已複製";
-        };
-      });
+      box.querySelectorAll("[data-wa]").forEach(btn => {
+  btn.onclick = () => {
+    const phone = decodeURIComponent(btn.dataset.wa).replace(/\D/g, "");
+    const msg = decodeURIComponent(btn.dataset.msg);
+    if (!phone) return alert("冇電話號碼");
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank");
+  };
+});
       box.querySelectorAll("[data-add-draw]").forEach(btn => {
         btn.onclick = () => {
           const eventId = eventFilter.value;
