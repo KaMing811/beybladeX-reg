@@ -41,17 +41,6 @@ async function eventCounts(db, eventId) {
 }
 
 
-if (path === "/api/admin/groups" && method === "GET") {
-  const denied = await requireAdmin(ctx);
-  if (denied) return denied;
-  const eventId = url.searchParams.get("event_id");
-  if (!eventId) return error("缺少 event_id");
-  const rows = await env.DB.prepare(
-    "SELECT * FROM groups WHERE event_id = ? ORDER BY id DESC LIMIT 10"
-  ).bind(Number(eventId)).all();
-  return json({ ok: true, groups: rows.results || [] });
-}
-
 async function handleApi(request, env) {
   await ensureColumns(env.DB);
   const url = new URL(request.url);
