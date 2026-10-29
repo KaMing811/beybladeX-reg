@@ -40,7 +40,27 @@ async function eventCounts(db, eventId) {
   return countsFromRows(raw.results);
 }
 
-// ===== Group APIs =====
+
+if (path === "/api/admin/groups" && method === "GET") {
+  const denied = await requireAdmin(ctx);
+  if (denied) return denied;
+  const eventId = url.searchParams.get("event_id");
+  if (!eventId) return error("缺少 event_id");
+  const rows = await env.DB.prepare(
+    "SELECT * FROM groups WHERE event_id = ? ORDER BY id DESC LIMIT 10"
+  ).bind(Number(eventId)).all();
+  return json({ ok: true, groups: rows.results || [] });
+}
+
+async function handleApi(request, env) {
+  await ensureColumns(env.DB);
+  const url = new URL(request.url);
+  const path = url.pathname.replace(/\/$/, "") || "/";
+  const method = request.method;
+  const ctx = { request, env };
+
+  try {
+    // ===== Group APIs =====
 if (path === "/api/admin/groups" && method === "POST") {
   const denied = await requireAdmin(ctx);
   if (denied) return denied;
@@ -67,26 +87,6 @@ if (path === "/api/admin/groups" && method === "POST") {
 
   return json({ ok: true, group_id: ins.meta.last_row_id });
 }
-
-if (path === "/api/admin/groups" && method === "GET") {
-  const denied = await requireAdmin(ctx);
-  if (denied) return denied;
-  const eventId = url.searchParams.get("event_id");
-  if (!eventId) return error("缺少 event_id");
-  const rows = await env.DB.prepare(
-    "SELECT * FROM groups WHERE event_id = ? ORDER BY id DESC LIMIT 10"
-  ).bind(Number(eventId)).all();
-  return json({ ok: true, groups: rows.results || [] });
-}
-
-async function handleApi(request, env) {
-  await ensureColumns(env.DB);
-  const url = new URL(request.url);
-  const path = url.pathname.replace(/\/$/, "") || "/";
-  const method = request.method;
-  const ctx = { request, env };
-
-  try {
     if (method === "GET" && path === "/api/events") {
       const events = await env.DB.prepare("SELECT * FROM events ORDER BY event_date DESC, id DESC").all();
       const out = [];
