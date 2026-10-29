@@ -40,6 +40,45 @@ async function eventCounts(db, eventId) {
   return countsFromRows(raw.results);
 }
 
+// ===== Group APIs =====
+if (path === "/api/admin/groups" && method === "POST") {
+  const denied = await requireAdmin(ctx);
+  if (denied) return denied;
+  const body = await readJson(request);
+  if (!body) return error("無效資料");
+
+  const eventId = Number(body.event_id);
+  const groupSize = Number(body.group_size) || 4;
+  const statuses = Array.isArray(body.statuses) ? body.statuses : [];
+  const groups = Array.isArray(body.groups) ? body.groups : [];
+
+  if (!eventId || !groups.length) return error("缺少資料");
+
+  const ins = await env.DB.prepare(
+    `INSERT INTO groups (event_id, group_size, statuses, groups_json, created_at)
+     VALUES (?, ?, ?, ?, ?)`
+  ).bind(
+    eventId,
+    groupSize,
+    JSON.stringify(statuses),
+    JSON.stringify(groups),
+    nowIso()
+  ).run();
+
+  return json({ ok: true, group_id: ins.meta.last_row_id });
+}
+
+if (path === "/api/admin/groups" && method === "GET") {
+  const denied = await requireAdmin(ctx);
+  if (denied) return denied;
+  const eventId = url.searchParams.get("event_id");
+  if (!eventId) return error("缺少 event_id");
+  const rows = await env.DB.prepare(
+    "SELECT * FROM groups WHERE event_id = ? ORDER BY id DESC LIMIT 10"
+  ).bind(Number(eventId)).all();
+  return json({ ok: true, groups: rows.results || [] });
+}
+
 async function handleApi(request, env) {
   await ensureColumns(env.DB);
   const url = new URL(request.url);
