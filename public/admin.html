@@ -54,6 +54,7 @@
         <button class="tab active" data-tab="regs">報名名單</button>
         <button class="tab" data-tab="draw">正選抽選</button>
         <button class="tab" data-tab="bracket">淘汰賽</button>
+        <button class="tab" data-tab="groups">小組分組</button>
       </div>
 
       <div id="tab-regs" class="tab-content active">
@@ -81,6 +82,13 @@
   <button class="btn ghost" id="loadBrackets" type="button">載入已儲存淘汰賽</button>
   <div id="savedBrackets" style="margin-top:0.6rem"></div>
 </div>
+          <div id="tab-groups" class="tab-content">
+  <div class="card">
+    <h3>小組分組</h3>
+    <div id="groupControls"></div>
+    <div id="groupResult" style="margin-top:1rem"></div>
+  </div>
+</div>
           <div id="bracketArea" style="margin-top:1rem"></div>
         </div>
       </div>
@@ -95,6 +103,113 @@
     const statusFilter = document.getElementById("statusFilter");
     const editor = document.getElementById("eventEditor");
     let events = [];
+
+async function loadGroupUI() {
+  const box = document.getElementById("groupControls");
+  const resultBox = document.getElementById("groupResult");
+  if (!eventFilter.value) {
+    box.innerHTML = "<p class='lede'>請先揀一場比賽</p>";
+    resultBox.innerHTML = "";
+    return;
+  }
+
+  // 先檢查有冇已儲存分組
+  let saved = [];
+  try {
+    const data = await api("/api/admin/groups?event_id=" + eventFilter.value);
+    saved = data.groups || [];
+  } catch (_) {}
+
+  if (saved.length > 0) {
+    // 已有分組 → 顯示最新結果 + 重新分組掣
+    const latest = saved[0];
+    const groupsData = JSON.parse(latest.groups_json || "[]");
+
+    box.innerHTML = `
+      <div class="toolbar">
+        <span class="lede">已有分組（#${latest.id} · 每組 ${latest.group_size} 人）</span>
+        <button class="btn ghost" id="reGroup" type="button">重新分組</button>
+      </div>
+    `;
+
+    resultBox.innerHTML = `
+      <h4>最新分組（共 ${groupsData.length} 組）</h4>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:1rem; margin-top:0.8rem;">
+        ${groupsData.map((group, i) => `
+          <div style="background:#1e2937; border:1px solid #475569; border-radius:8px; padding:0.8rem;">
+            <div style="font-weight:700; color:#f97316; margin-bottom:0.4rem;">第 ${i + 1} 組（${group.length} 人）</div>
+            ${group.map(p => `<div style="padding:0.2rem 0; font-size:0.9rem;">${p.name}　${p.phone}</div>`).join("")}
+          </div>
+        `).join("")}
+      </div>
+    `;
+
+    document.getElementById("reGroup").onclick = () => showGroupForm();
+  } else {
+    // 未有分組 → 顯示分組表單
+    showGroupForm();
+  }
+
+  function showGroupForm() {
+    box.innerHTML = `
+      <div class="toolbar">
+        <label>每組人數
+          <input type="number" id="groupSize" value="4" min="2" style="width:70px">
+        </label>
+        <button class="btn" id="doGroup" type="button">開始分組</button>
+      </div>
+      <div style="margin-top:0.6rem; display:flex; flex-wrap:wrap; gap:0.8rem;">
+        ${ALL_STATUSES.map(s => `
+          <label style="display:inline-flex; align-items:center; gap:0.3rem;">
+            <input type="checkbox" class="group-status" value="${s.v}" ${s.v === "paid" || s.v === "confirmed" ? "checked" : ""}>
+            ${s.l}
+          </label>
+        `).join("")}
+      </div>
+    `;
+    resultBox.innerHTML = "";
+
+    document.getElementById("doGroup").onclick = async () => {
+      const size = Number(document.getElementById("groupSize").value) || 4;
+      const checked = [...document.querySelectorAll(".group-status:checked")].map(el => el.value);
+      if (!checked.length) return alert("至少揀一個 status");
+
+      const { registrations } = await api("/api/admin/registrations?event_id=" + eventFilter.value);
+      const pool = (registrations || []).filter(r => checked.includes(r.status));
+      if (pool.length === 0) return alert("冇符合條件嘅人");
+
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+
+      const groups = [];
+      for (let i = 0; i < pool.length; i += size) {
+        groups.push(pool.slice(i, i + size));
+      }
+
+      try {
+        const groupsData = groups.map(g => g.map(p => ({
+          id: p.id,
+          name: p.display_name,
+          phone: p.whatsapp
+        })));
+        await api("/api/admin/groups", {
+          method: "POST",
+          body: {
+            event_id: Number(eventFilter.value),
+            group_size: size,
+            statuses: checked,
+            groups: groupsData,
+          },
+        });
+        loadGroupUI(); // 重新載入，顯示已儲存結果
+      } catch (err) {
+        alert("分組失敗：" + (err.message || ""));
+      }
+    };
+  }
+}
     document.getElementById("loadBrackets").onclick = async () => {
   if (!eventFilter.value) return alert("請先揀比賽");
   const box = document.getElementById("savedBrackets");
@@ -221,6 +336,7 @@ async function loadSavedBracket(bracketId) {
         document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
         tab.classList.add("active");
         document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
+        if (tab.dataset.tab === "groups") loadGroupUI();
       };
     });
 
@@ -734,6 +850,7 @@ async function loadSavedBracket(bracketId) {
       if (keep && events.some((e) => String(e.id) === String(keep))) eventFilter.value = keep;
       await loadRegs();
       await loadDrawUI();
+      await loadGroupUI();
     }
 
     document.getElementById("newEvent").onclick = () => renderEditor({});
@@ -743,7 +860,7 @@ async function loadSavedBracket(bracketId) {
       else alert("請先揀一場比賽");
     };
     document.getElementById("reload").onclick = boot;
-    eventFilter.onchange = () => { loadRegs(); loadDrawUI(); };
+    eventFilter.onchange = () => { loadRegs(); loadDrawUI(); loadGroupUI(); };
     statusFilter.onchange = loadRegs;
 
     if (authed()) {
