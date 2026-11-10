@@ -147,33 +147,51 @@ async function hmac(secret, text) {
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function issueAdminToken(env) {
+export function generateSalt() {
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  return [...arr].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+export async function hashPassword(password, salt) {
+  const data = new TextEncoder().encode(password + salt);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+export async function issueAdminToken(env, admin) {
   const exp = Date.now() + 7 * 24 * 60 * 60 * 1000;
-  const payload = `admin.${exp}`;
+  const payload = `admin.${admin.id}.${admin.role}.${exp}`;
   const sig = await hmac(env.ADMIN_SECRET || env.ADMIN_PASSWORD || "dev", payload);
   return `${payload}.${sig}`;
 }
 
 export async function verifyAdminToken(env, token) {
-  if (!token) return false;
+  if (!token) return null;
   const parts = token.split(".");
-  if (parts.length !== 3) return false;
-  const [role, exp, sig] = parts;
-  if (role !== "admin") return false;
-  if (Number(exp) < Date.now()) return false;
-  const payload = `${role}.${exp}`;
+  if (parts.length !== 5) return null;
+  const [role, id, adminRole, exp, sig] = parts;
+  if (role !== "admin") return null;
+  if (Number(exp) < Date.now()) return null;
+  const payload = `${role}.${id}.${adminRole}.${exp}`;
   const expect = await hmac(env.ADMIN_SECRET || env.ADMIN_PASSWORD || "dev", payload);
-  if (expect.length !== sig.length) return false;
-  let diff = 0;
-  for (let i = 0; i < expect.length; i++) diff |= expect.charCodeAt(i) ^ sig.charCodeAt(i);
-  return diff === 0;
+  if (expect !== sig) return null;
+  return { id: Number(id), role: adminRole };
 }
 
 export async function requireAdmin(context) {
   const header = context.request.headers.get("authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-  const ok = await verifyAdminToken(context.env, token);
-  if (!ok) return error("未授權，請重新登入後台", 401);
+  const admin = await verifyAdminToken(context.env, token);
+  if (!admin) return error("未授權，請重新登入後台", 401);
+  context.admin = admin;
+  return null;
+}
+
+export async function requireSuperadmin(context) {
+  const denied = await requireAdmin(context);
+  if (denied) return denied;
+  if (context.admin.role !== "superadmin") return error("需要 Superadmin 權限", 403);
   return null;
 }
 

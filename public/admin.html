@@ -25,16 +25,18 @@
       </div>
     </div>
     <h1>主辦後台</h1>
-    <p class="lede">確認報名之後，玩家先可以喺「我的報名」見到 PayMe / FPS。確認後可複製 WhatsApp 訊息。</p>
+    <p class="lede">確認報名之後，玩家先可以喺「我的報名」見到 PayMe / FPS。</p>
 
     <form id="login" class="card">
-      <label>Admin 密碼<input type="password" name="password" required /></label>
+      <label>帳號<input name="username" required /></label>
+      <label>密碼<input type="password" name="password" required /></label>
       <button class="btn" type="submit">登入</button>
       <p id="loginMsg" class="lede"></p>
     </form>
 
     <div id="app" class="hidden">
       <div class="toolbar">
+        <span id="whoami" class="lede"></span>
         <button class="btn" id="newEvent" type="button">開新比賽</button>
         <button class="btn ghost" id="editEvent" type="button">編輯</button>
         <select id="eventFilter"></select>
@@ -55,6 +57,7 @@
         <button class="tab" data-tab="draw">正選抽選</button>
         <button class="tab" data-tab="bracket">淘汰賽</button>
         <button class="tab" data-tab="groups">小組分組</button>
+        <button class="tab" id="tabAdmins" data-tab="admins" style="display:none">Admin 管理</button>
       </div>
 
       <div id="tab-regs" class="tab-content active">
@@ -73,28 +76,49 @@
           <div id="drawHistory" style="margin-top:1rem"></div>
         </div>
       </div>
-<div id="tab-bracket" class="tab-content">
-  <div class="card">
-    <h3>淘汰賽</h3>
-    <button class="btn" id="genBracket" type="button">用最近抽選生成淘汰賽</button>
-    <div style="margin-top:0.8rem">
-      <button class="btn ghost" id="loadBrackets" type="button">載入已儲存淘汰賽</button>
-      <div id="savedBrackets" style="margin-top:0.6rem"></div>
-    </div>
-    <div id="bracketArea" style="margin-top:1rem"></div>
-  </div>
-</div>
 
-<div id="tab-groups" class="tab-content">
-  <div class="card">
-    <h3>小組分組</h3>
-    <div id="groupControls"></div>
-    <div id="groupResult" style="margin-top:1rem"></div>
-  </div>
-</div>
-      
+      <div id="tab-bracket" class="tab-content">
+        <div class="card">
+          <h3>淘汰賽</h3>
+          <button class="btn" id="genBracket" type="button">用最近抽選生成淘汰賽</button>
+          <div style="margin-top:0.8rem">
+            <button class="btn ghost" id="loadBrackets" type="button">載入已儲存淘汰賽</button>
+            <div id="savedBrackets" style="margin-top:0.6rem"></div>
+          </div>
+          <div id="bracketArea" style="margin-top:1rem"></div>
+        </div>
+      </div>
+
+      <div id="tab-groups" class="tab-content">
+        <div class="card">
+          <h3>小組分組</h3>
+          <div id="groupControls"></div>
+          <div id="groupResult" style="margin-top:1rem"></div>
+        </div>
+      </div>
+
+      <div id="tab-admins" class="tab-content">
+        <div class="card">
+          <h3>Admin 管理</h3>
+          <div id="adminList"></div>
+          <hr style="margin:1rem 0; border-color:#334155">
+          <h4>新增 Admin</h4>
+          <form id="addAdminForm" style="display:grid; gap:0.6rem; max-width:400px">
+            <label>帳號<input name="username" required /></label>
+            <label>密碼<input type="password" name="password" required /></label>
+            <label>角色
+              <select name="role">
+                <option value="admin">Admin</option>
+                <option value="superadmin">Superadmin</option>
+              </select>
+            </label>
+            <button class="btn" type="submit">新增</button>
+          </form>
+        </div>
+      </div>
     </div>
   </div>
+
   <script type="module">
     import { api, statusPill, feeText } from "/app.js";
 
@@ -104,254 +128,73 @@
     const statusFilter = document.getElementById("statusFilter");
     const editor = document.getElementById("eventEditor");
     let events = [];
+    let currentRole = "";
 
-async function loadGroupUI() {
-  const box = document.getElementById("groupControls");
-  const resultBox = document.getElementById("groupResult");
-  if (!eventFilter.value) {
-    box.innerHTML = "<p class='lede'>請先揀一場比賽</p>";
-    resultBox.innerHTML = "";
-    return;
-  }
-
-  let saved = [];
-  try {
-    const data = await api("/api/admin/groups?event_id=" + eventFilter.value);
-    saved = data.groups || [];
-  } catch (_) {}
-
-  if (saved.length > 0) {
-    const latest = saved[0];
-    const groupsData = JSON.parse(latest.groups_json || "[]");
-
-    box.innerHTML = `
-      <div class="toolbar">
-        <span class="lede">已有分組（#${latest.id} · 每組 ${latest.group_size} 人）</span>
-        <button class="btn ghost" id="reGroup" type="button">重新分組</button>
-      </div>
-    `;
-
-    resultBox.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem;">
-        <h4 style="margin:0">最新分組（共 ${groupsData.length} 組）</h4>
-        <button class="btn small" id="exportGroups">Export</button>
-      </div>
-      <div id="printableGroups" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:1rem;">
-        ${groupsData.map((group, i) => `
-          <div style="background:#1e2937; border:1px solid #475569; border-radius:8px; padding:0.8rem;">
-            <div style="font-weight:700; color:#f97316; margin-bottom:0.4rem;">${String.fromCharCode(65 + i)} 組（${group.length} 人）</div>
-            ${group.map(p => `<div style="padding:0.2rem 0; font-size:0.9rem;">${p.name}　${p.phone}</div>`).join("")}
-          </div>
-        `).join("")}
-      </div>
-    `;
-
-    document.getElementById("exportGroups").onclick = () => {
-      const printWin = window.open("", "_blank");
-      printWin.document.write(`
-        <html>
-          <head>
-            <title>小組分組</title>
-            <style>
-              body { font-family: -apple-system, sans-serif; padding: 20px; background: #0f172a; color: #e2e8f0; }
-              h4 { color: #f97316; }
-            </style>
-          </head>
-          <body>
-            <h4>小組分組（共 ${groupsData.length} 組）</h4>
-            ${document.getElementById("printableGroups").innerHTML}
-          </body>
-        </html>
-      `);
-      printWin.document.close();
-      printWin.focus();
-      setTimeout(() => printWin.print(), 400);
-    };
-
-    document.getElementById("reGroup").onclick = () => showGroupForm();
-  } else {
-    showGroupForm();
-  }
-
-  function showGroupForm() {
-    box.innerHTML = `
-      <div class="toolbar">
-        <label>每組人數
-          <input type="number" id="groupSize" value="4" min="2" style="width:70px">
-        </label>
-        <button class="btn" id="doGroup" type="button">開始分組</button>
-      </div>
-      <div style="margin-top:0.6rem; display:flex; flex-wrap:wrap; gap:0.8rem;">
-        ${ALL_STATUSES.map(s => `
-          <label style="display:inline-flex; align-items:center; gap:0.3rem;">
-            <input type="checkbox" class="group-status" value="${s.v}" ${s.v === "paid" || s.v === "confirmed" ? "checked" : ""}>
-            ${s.l}
-          </label>
-        `).join("")}
-      </div>
-    `;
-    resultBox.innerHTML = "";
-
-    document.getElementById("doGroup").onclick = async () => {
-      const size = Number(document.getElementById("groupSize").value) || 4;
-      const checked = [...document.querySelectorAll(".group-status:checked")].map(el => el.value);
-      if (!checked.length) return alert("至少揀一個 status");
-
-      const { registrations } = await api("/api/admin/registrations?event_id=" + eventFilter.value);
-      const pool = (registrations || []).filter(r => checked.includes(r.status));
-      if (pool.length === 0) return alert("冇符合條件嘅人");
-
-      for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [pool[i], pool[j]] = [pool[j], pool[i]];
-      }
-
-      const groups = [];
-      for (let i = 0; i < pool.length; i += size) {
-        groups.push(pool.slice(i, i + size));
-      }
-
-      try {
-        const groupsData = groups.map(g => g.map(p => ({
-          id: p.id,
-          name: p.display_name,
-          phone: p.whatsapp
-        })));
-        await api("/api/admin/groups", {
-          method: "POST",
-          body: {
-            event_id: Number(eventFilter.value),
-            group_size: size,
-            statuses: checked,
-            groups: groupsData,
-          },
-        });
-        loadGroupUI();
-      } catch (err) {
-        alert("分組失敗：" + (err.message || ""));
-      }
-    };
-  }
-}
-    document.getElementById("loadBrackets").onclick = async () => {
-  if (!eventFilter.value) return alert("請先揀比賽");
-  const box = document.getElementById("savedBrackets");
-  box.innerHTML = "<p class='lede'>載入中...</p>";
-
-  try {
-    const { brackets } = await api("/api/admin/brackets?event_id=" + eventFilter.value);
-    if (!brackets?.length) {
-      box.innerHTML = "<p class='lede'>未有已儲存淘汰賽</p>";
-      return;
+    function authed() { return !!localStorage.getItem("beyx_admin"); }
+    function showApp(on) {
+      loginForm.classList.toggle("hidden", on);
+      app.classList.toggle("hidden", !on);
     }
 
-    box.innerHTML = brackets.map(b => `
-      <div style="padding:0.6rem; border:1px solid #334155; border-radius:6px; margin-bottom:0.4rem; display:flex; justify-content:space-between; align-items:center;">
-        <div>
-          <strong>淘汰賽 #${b.id}</strong>
-          <span class="lede">　${(b.created_at || "").slice(0, 16)}</span>
-        </div>
-        <button class="btn small" data-load-bracket="${b.id}">載入</button>
-      </div>
-    `).join("");
+    document.getElementById("logout").onclick = () => {
+      localStorage.removeItem("beyx_admin");
+      localStorage.removeItem("beyx_admin_role");
+      showApp(false);
+    };
 
-    box.querySelectorAll("[data-load-bracket]").forEach(btn => {
-      btn.onclick = () => loadSavedBracket(Number(btn.dataset.loadBracket));
-    });
-  } catch (err) {
-    box.innerHTML = "<p class='lede'>載入失敗</p>";
-  }
-};
-function renderBracket(rounds, title) {
-  const box = document.getElementById("bracketArea");
-  const totalRounds = rounds.length;
-  const matchW = 150;
-  const matchH = 48;
-  const gapY = 12;
-  const connW = 36;
-
-  // 計算整體高度（以第一輪為準）
-  const baseCount = rounds[0].length;
-  const svgH = baseCount * (matchH + gapY) + 100;
-  const svgW = (matchW + connW) * totalRounds + 40;
-
-  let html = `
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-      <h3 style="margin:0">${title}</h3>
-      <button class="btn small" id="exportPdf">Export PDF</button>
-    </div>
-    <div id="printableBracket" style="overflow-x:auto; background:#0f172a; border-radius:8px; padding:1rem;">
-      <svg width="${svgW}" height="${svgH}">
-        <text x="${svgW/2}" y="28" fill="#f97316" font-size="15" font-weight="700" text-anchor="middle">${title}</text>
-  `;
-
-  rounds.forEach((round, ri) => {
-    const x = 20 + ri * (matchW + connW);
-    const spacing = Math.pow(2, ri) * (matchH + gapY);
-    const offset = (spacing - matchH) / 2;
-
-    round.forEach((m, mi) => {
-      const y = 50 + mi * spacing + offset;
-
-      const p1 = m.p1 ? m.p1.name : "BYE";
-      const p2 = m.p2 ? m.p2.name : "BYE";
-
-      html += `
-        <rect x="${x}" y="${y}" width="${matchW}" height="${matchH}" rx="4" fill="#1e2937" stroke="#475569"/>
-        <text x="${x + 8}" y="${y + 17}" fill="#e2e8f0" font-size="11">${p1}</text>
-        <line x1="${x + 6}" y1="${y + 24}" x2="${x + matchW - 6}" y2="${y + 24}" stroke="#334155"/>
-        <text x="${x + 8}" y="${y + 40}" fill="#e2e8f0" font-size="11">${p2}</text>
-      `;
-
-      // 連接線
-      if (ri < totalRounds - 1) {
-        const nextSpacing = Math.pow(2, ri + 1) * (matchH + gapY);
-        const nextOffset = (nextSpacing - matchH) / 2;
-        const nextY = 50 + Math.floor(mi / 2) * nextSpacing + nextOffset + matchH / 2;
-        const midX = x + matchW + connW / 2;
-
-        html += `
-          <line x1="${x + matchW}" y1="${y + matchH/2}" x2="${midX}" y2="${y + matchH/2}" stroke="#64748b" stroke-width="1.5"/>
-          <line x1="${midX}" y1="${y + matchH/2}" x2="${midX}" y2="${nextY}" stroke="#64748b" stroke-width="1.5"/>
-          <line x1="${midX}" y1="${nextY}" x2="${x + matchW + connW}" y2="${nextY}" stroke="#64748b" stroke-width="1.5"/>
-        `;
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(loginForm);
+      const msg = document.getElementById("loginMsg");
+      msg.textContent = "";
+      try {
+        const data = await api("/api/admin/login", {
+          method: "POST",
+          body: { username: fd.get("username"), password: fd.get("password") },
+        });
+        localStorage.setItem("beyx_admin", data.token);
+        localStorage.setItem("beyx_admin_role", data.role);
+        currentRole = data.role;
+        document.getElementById("whoami").textContent = `已登入：${data.username}（${data.role}）`;
+        document.getElementById("tabAdmins").style.display = data.role === "superadmin" ? "" : "none";
+        showApp(true);
+        await boot();
+      } catch (err) {
+        msg.textContent = err.message;
       }
     });
-  });
 
-  html += `</svg></div>`;
-  box.innerHTML = html;
+    async function loadAdmins() {
+      if (currentRole !== "superadmin") return;
+      const box = document.getElementById("adminList");
+      try {
+        const { admins } = await api("/api/admin/admins");
+        box.innerHTML = admins.map(a => `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0; border-bottom:1px solid #334155;">
+            <div><strong>${a.username}</strong><span class="lede">　${a.role}　${a.active ? "啟用" : "停用"}</span></div>
+            <div><button class="btn small ghost" data-toggle="${a.id}" data-active="${a.active ? 0 : 1}">${a.active ? "停用" : "啟用"}</button></div>
+          </div>`).join("");
+        box.querySelectorAll("[data-toggle]").forEach(btn => {
+          btn.onclick = async () => {
+            await api("/api/admin/admins/" + btn.dataset.toggle, { method: "PATCH", body: { active: Number(btn.dataset.active) } });
+            loadAdmins();
+          };
+        });
+      } catch (err) {
+        box.innerHTML = "<p class='lede'>載入失敗</p>";
+      }
+    }
 
-  document.getElementById("exportPdf").onclick = () => {
-    const printWin = window.open("", "_blank");
-    printWin.document.write(`
-      <html>
-        <head>
-          <title>${title}</title>
-          <style>body { margin:0; background:#0f172a; }</style>
-        </head>
-        <body>${document.getElementById("printableBracket").innerHTML}</body>
-      </html>
-    `);
-    printWin.document.close();
-    printWin.focus();
-    setTimeout(() => printWin.print(), 500);
-  };
-}
-async function loadSavedBracket(bracketId) {
-  try {
-    const { brackets } = await api("/api/admin/brackets?event_id=" + eventFilter.value);
-    const b = brackets.find(x => x.id === bracketId);
-    if (!b) return alert("搵唔到");
-
-    const rounds = JSON.parse(b.rounds || "[]");
-    const players = JSON.parse(b.players || "[]");
-
-    renderBracket(rounds, `淘汰賽 #${b.id}（${players.length} 人）`);
-  } catch (err) {
-    alert(err.message || "載入失敗");
-  }
-}
+    document.getElementById("addAdminForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      try {
+        await api("/api/admin/admins", { method: "POST", body: { username: fd.get("username"), password: fd.get("password"), role: fd.get("role") } });
+        e.target.reset();
+        loadAdmins();
+        alert("已新增");
+      } catch (err) { alert(err.message); }
+    };
 
     document.querySelectorAll(".tab").forEach(tab => {
       tab.onclick = () => {
@@ -360,155 +203,20 @@ async function loadSavedBracket(bracketId) {
         tab.classList.add("active");
         document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
         if (tab.dataset.tab === "groups") loadGroupUI();
+        if (tab.dataset.tab === "admins") loadAdmins();
       };
     });
 
-    function authed() { return !!localStorage.getItem("beyx_admin"); }
+    const ALL_STATUSES = [
+      { v: "pending", l: "pending（待確認）" },
+      { v: "confirmed", l: "confirmed（已確認）" },
+      { v: "paid", l: "paid（已付款）" },
+      { v: "waitlist", l: "waitlist（候補）" },
+      { v: "rejected", l: "rejected（未獲接納）" },
+      { v: "cancelled", l: "cancelled（已取消）" },
+    ];
 
-    function showApp(on) {
-      loginForm.classList.toggle("hidden", on);
-      app.classList.toggle("hidden", !on);
-    }
-
-    document.getElementById("logout").onclick = () => {
-      localStorage.removeItem("beyx_admin");
-      showApp(false);
-    };
-
-    loginForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const password = new FormData(loginForm).get("password");
-      const msg = document.getElementById("loginMsg");
-      msg.textContent = "";
-      try {
-        const data = await api("/api/admin/login", { method: "POST", body: { password } });
-        localStorage.setItem("beyx_admin", data.token);
-        showApp(true);
-        await boot();
-      } catch (err) {
-        msg.textContent = err.message;
-      }
-    });
-
-    function field(name, label, value = "", type = "text") {
-      return `<label>${label}<input name="${name}" type="${type}" value="${String(value ?? "").replace(/"/g, "&quot;")}" /></label>`;
-    }
-
-    function renderEditor(ev = {}) {
-      editor.classList.remove("hidden");
-      const cats = Array.isArray(ev.categories) ? ev.categories.join(",") : (ev.categories || "U12,公開組");
-      editor.innerHTML = `
-        <h3>${ev.id ? "編輯場次" : "開新場次"}</h3>
-        <form id="evForm">
-          <label>類型
-            <select name="event_kind">
-              <option value="tournament" ${ev.event_kind !== "funplay" ? "selected" : ""}>比賽</option>
-              <option value="funplay" ${ev.event_kind === "funplay" ? "selected" : ""}>Fun Play</option>
-            </select>
-          </label>
-          <div class="row2">
-            ${field("title", "名稱", ev.title || "")}
-            ${field("slug", "Slug（網址）", ev.slug || "")}
-          </div>
-          ${field("subtitle", "副題", ev.subtitle || "")}
-          <div class="row2">
-            ${field("venue", "場地", ev.venue || "")}
-            ${field("address", "地址", ev.address || "")}
-          </div>
-          <div class="row2">
-            ${field("event_date", "日期", ev.event_date || "", "date")}
-            ${field("registration_deadline", "報名截止（可含時間）", ev.registration_deadline || "")}
-          </div>
-          <div class="row2">
-            ${field("start_time", "開始", ev.start_time || "", "time")}
-            ${field("end_time", "結束", ev.end_time || "", "time")}
-          </div>
-          <div class="row2">
-            ${field("capacity", "名額", ev.capacity ?? 32, "number")}
-            ${field("entry_fee", "報名費", ev.entry_fee ?? 50, "number")}
-          </div>
-          ${field("categories", "組別（逗號分隔）", cats)}
-          <label>簡介<textarea name="description">${ev.description || ""}</textarea></label>
-          <label>規則<textarea name="rules">${ev.rules || ""}</textarea></label>
-          <div class="row2">
-            ${field("payme_id", "PayMe 號碼／ID", ev.payme_id || "")}
-            ${field("payme_link", "PayMe 連結", ev.payme_link || "")}
-          </div>
-          <div class="row2">
-            ${field("fps_id", "FPS 電話／識別碼", ev.fps_id || "")}
-            ${field("fps_name", "FPS 戶名", ev.fps_name || "")}
-          </div>
-          ${field("whatsapp", "主辦 WhatsApp", ev.whatsapp || "")}
-          <label>付款備註<textarea name="payment_note">${ev.payment_note || "確認後請轉帳，備註填 Belader 名稱。"}</textarea></label>
-          ${ev.poster_url ? `<p><img class="poster" src="${ev.poster_url}" alt="海報" /></p>
-          <button class="btn bad" type="button" id="delPoster">移除海報</button>` : ""}
-          <label>上傳海報（JPG/PNG/WEBP；未開 R2 請小於 450KB）<input type="file" id="posterFile" accept="image/jpeg,image/png,image/webp,image/gif" /></label>
-          <label>或貼海報圖片網址<input name="poster_url" value="${String(ev.poster_url || "").startsWith("http") || String(ev.poster_url || "").startsWith("/") ? String(ev.poster_url).replace(/"/g, "&quot;") : ""}" placeholder="https://..." /></label>
-          <label><input type="checkbox" name="registration_open" ${ev.registration_open !== false ? "checked" : ""} /> 開放報名</label>
-          <label><input type="checkbox" name="show_public_list" ${ev.show_public_list ? "checked" : ""} /> 公開已報名名單</label>
-          <div class="toolbar">
-            <button class="btn" type="submit">儲存</button>
-            <button class="btn ghost" type="button" id="cancelEv">取消</button>
-            ${ev.id ? `<button class="btn bad" type="button" id="delEv">刪除比賽</button>` : ""}
-          </div>
-        </form>`;
-
-      document.getElementById("cancelEv").onclick = () => editor.classList.add("hidden");
-      document.getElementById("evForm").onsubmit = async (e) => {
-        e.preventDefault();
-        const fd = new FormData(e.target);
-        const body = Object.fromEntries(fd.entries());
-        body.registration_open = fd.get("registration_open") === "on";
-        body.show_public_list = fd.get("show_public_list") === "on";
-        body.capacity = Number(body.capacity);
-        body.entry_fee = Number(body.entry_fee);
-        try {
-          let id = ev.id;
-          if (id) await api("/api/admin/events/" + id, { method: "PUT", body });
-          else {
-            const created = await api("/api/admin/events", { method: "POST", body });
-            id = created.id;
-          }
-          const file = document.getElementById("posterFile")?.files?.[0];
-          if (id && (file || (body.poster_url && !String(body.poster_url).startsWith("data:")))) {
-            const fdPoster = new FormData();
-            if (file) fdPoster.append("file", file);
-            if (body.poster_url) fdPoster.append("poster_url", body.poster_url);
-            const token = localStorage.getItem("beyx_admin");
-            const res = await fetch("/api/admin/events/" + id + "/poster", {
-              method: "POST",
-              headers: { authorization: "Bearer " + token },
-              body: fdPoster,
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok || data.ok === false) throw new Error(data.error || "海報上傳失敗");
-          }
-          editor.classList.add("hidden");
-          await boot();
-        } catch (err) {
-          alert(err.message || "儲存失敗");
-        }
-      };
-      const del = document.getElementById("delEv");
-      if (del) del.onclick = async () => {
-        if (!confirm("刪除比賽同全部報名？")) return;
-        await api("/api/admin/events/" + ev.id, { method: "DELETE" });
-        editor.classList.add("hidden");
-        await boot();
-      };
-      const delPoster = document.getElementById("delPoster");
-      if (delPoster) delPoster.onclick = async () => {
-        if (!ev.id) return;
-        if (!confirm("移除呢張海報？")) return;
-        try {
-          await api("/api/admin/events/" + ev.id + "/poster", { method: "DELETE" });
-          ev.poster_url = "";
-          renderEditor(ev);
-        } catch (err) {
-          alert(err.message || "移除失敗");
-        }
-      };
-    }
+    function manualKey(eventId) { return "draw_manual_" + eventId; }
 
     function formatHKT(iso) {
       if (!iso) return "";
@@ -523,379 +231,361 @@ async function loadSavedBracket(bracketId) {
       return `${y}-${m}-${day} ${hh}:${mm}`;
     }
 
-   async function loadRegs() {
-  const qs = new URLSearchParams();
-  if (!eventFilter.value) {
-    document.getElementById("regTitle").textContent = "報名名單";
-    document.getElementById("regs").innerHTML = "<p class='lede'>請先喺上面揀一場比賽。</p>";
-    return;
-  }
-  qs.set("event_id", eventFilter.value);
-  localStorage.setItem("beyx_admin_event", eventFilter.value);
-  const ev = events.find((e) => String(e.id) === eventFilter.value);
-  document.getElementById("regTitle").textContent = ev
-    ? `報名名單 — ${ev.title}`
-    : "報名名單";
-  if (statusFilter.value) qs.set("status", statusFilter.value);
-  const { registrations } = await api("/api/admin/registrations?" + qs.toString());
-  const box = document.getElementById("regs");
-  if (!registrations.length) {
-    box.innerHTML = "<p class='lede'>未有報名。</p>";
-    return;
-  }
-
-  // 統計
-  const counts = {};
-  registrations.forEach(r => {
-    counts[r.status] = (counts[r.status] || 0) + 1;
-  });
-  const total = registrations.length;
-const countHtml = `
-  <div style="display:flex; flex-wrap:wrap; gap:0.6rem; margin-bottom:0.8rem; font-size:0.85rem;">
-    <span class="pill" style="cursor:pointer" data-filter="">全部 ${total}</span>
-    <span class="pill" style="cursor:pointer" data-filter="pending">待確認 ${counts.pending || 0}</span>
-    <span class="pill" style="cursor:pointer" data-filter="confirmed">已確認 ${counts.confirmed || 0}</span>
-    <span class="pill" style="cursor:pointer" data-filter="paid">已付款 ${counts.paid || 0}</span>
-    <span class="pill" style="cursor:pointer" data-filter="waitlist">候補 ${counts.waitlist || 0}</span>
-    <span class="pill" style="cursor:pointer" data-filter="rejected">未獲接納 ${counts.rejected || 0}</span>
-  </div>
-`;
-
-  box.innerHTML = countHtml + `<table>
-    <thead><tr><th>時間</th><th>玩家</th><th>聯絡</th><th>組別</th><th>狀態</th><th>動作</th></tr></thead>
-    <tbody>
-      ${registrations.map(r => `
-        <tr>
-          <td>${formatHKT(r.created_at)}</td>
-          <td><strong>${r.display_name}</strong><br>${r.real_name || ""}<br><span class="lede">${r.notes || ""}</span></td>
-          <td>${r.whatsapp}</td>
-          <td>${r.category || ""}</td>
-          <td>${statusPill(r.status)}<br><span class="lede">${r.paid_ref || ""}</span></td>
-          <td>
-            <div class="toolbar">
-              <button class="btn small ok" data-act="confirmed" data-id="${r.id}">確認</button>
-              <button class="btn small" data-act="paid" data-id="${r.id}">已收款</button>
-              <button class="btn small warn" data-act="waitlist" data-id="${r.id}">候補</button>
-              <button class="btn small bad" data-act="rejected" data-id="${r.id}">拒絕</button>
-              <button class="btn small ghost" data-wa="${encodeURIComponent(r.whatsapp || "")}" data-msg="${encodeURIComponent(r.wa_message || "")}">開啟 WhatsApp</button>
-              <button class="btn small ghost" data-add-draw="${r.id}">加入抽選</button>
-            </div>
-          </td>
-        </tr>`).join("")}
-    </tbody></table>`;
-
-     box.querySelectorAll("[data-filter]").forEach(el => {
-  el.onclick = () => {
-    statusFilter.value = el.dataset.filter;
-    loadRegs();
-  };
-});
-
-  // 之後嘅事件綁定保持不變
-  box.querySelectorAll("[data-act]").forEach(btn => {
-    btn.onclick = async () => {
-      let paid_ref = "";
-      if (btn.dataset.act === "paid") paid_ref = prompt("付款備註（可選，例如轉帳後4位）", "") || "";
-      const data = await api("/api/admin/registrations/" + btn.dataset.id, {
-        method: "PATCH",
-        body: { status: btn.dataset.act, paid_ref },
-      });
-      if (btn.dataset.act === "confirmed" && data.wa_message) {
-        await navigator.clipboard.writeText(data.wa_message).catch(() => {});
-        alert("已確認，WhatsApp 訊息已複製（如瀏覽器允許）。");
+    async function loadGroupUI() {
+      const box = document.getElementById("groupControls");
+      const resultBox = document.getElementById("groupResult");
+      if (!eventFilter.value) {
+        box.innerHTML = "<p class='lede'>請先揀一場比賽</p>";
+        resultBox.innerHTML = "";
+        return;
       }
-      await loadRegs();
-    };
-  });
-  box.querySelectorAll("[data-wa]").forEach(btn => {
-    btn.onclick = () => {
-      const phone = decodeURIComponent(btn.dataset.wa).replace(/\D/g, "");
-      const msg = decodeURIComponent(btn.dataset.msg);
-      if (!phone) return alert("冇電話號碼");
-      const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
-      window.open(url, "_blank");
-    };
-  });
-  box.querySelectorAll("[data-add-draw]").forEach(btn => {
-    btn.onclick = () => {
-      const eventId = eventFilter.value;
-      if (!eventId) return;
-      const key = manualKey(eventId);
-      const arr = JSON.parse(localStorage.getItem(key) || "[]");
-      const id = Number(btn.dataset.addDraw);
-      if (!arr.includes(id)) arr.push(id);
-      localStorage.setItem(key, JSON.stringify(arr));
-      btn.textContent = "已加入";
-      btn.disabled = true;
-    };
-  });
-}
+      let saved = [];
+      try {
+        const data = await api("/api/admin/groups?event_id=" + eventFilter.value);
+        saved = data.groups || [];
+      } catch (_) {}
+      if (saved.length > 0) {
+        const latest = saved[0];
+        const groupsData = JSON.parse(latest.groups_json || "[]");
+        box.innerHTML = `<div class="toolbar"><span class="lede">已有分組（#${latest.id} · 每組 ${latest.group_size} 人）</span><button class="btn ghost" id="reGroup" type="button">重新分組</button></div>`;
+        resultBox.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem;">
+            <h4 style="margin:0">最新分組（共 ${groupsData.length} 組）</h4>
+            <button class="btn small" id="exportGroups">Export</button>
+          </div>
+          <div id="printableGroups" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:1rem;">
+            ${groupsData.map((group, i) => `
+              <div style="background:#1e2937; border:1px solid #475569; border-radius:8px; padding:0.8rem;">
+                <div style="font-weight:700; color:#f97316; margin-bottom:0.4rem;">${String.fromCharCode(65 + i)} 組（${group.length} 人）</div>
+                ${group.map(p => `<div style="padding:0.2rem 0; font-size:0.9rem;">${p.name}　${p.phone}</div>`).join("")}
+              </div>`).join("")}
+          </div>`;
+        document.getElementById("exportGroups").onclick = () => {
+          const printWin = window.open("", "_blank");
+          printWin.document.write(`<html><head><title>小組分組</title><style>body{font-family:-apple-system,sans-serif;padding:20px;background:#0f172a;color:#e2e8f0}h4{color:#f97316}</style></head><body><h4>小組分組（共 ${groupsData.length} 組）</h4>${document.getElementById("printableGroups").innerHTML}</body></html>`);
+          printWin.document.close();
+          printWin.focus();
+          setTimeout(() => printWin.print(), 400);
+        };
+        document.getElementById("reGroup").onclick = () => showGroupForm();
+      } else {
+        showGroupForm();
+      }
+      function showGroupForm() {
+        box.innerHTML = `
+          <div class="toolbar"><label>每組人數<input type="number" id="groupSize" value="4" min="2" style="width:70px"></label><button class="btn" id="doGroup" type="button">開始分組</button></div>
+          <div style="margin-top:0.6rem; display:flex; flex-wrap:wrap; gap:0.8rem;">
+            ${ALL_STATUSES.map(s => `<label style="display:inline-flex; align-items:center; gap:0.3rem;"><input type="checkbox" class="group-status" value="${s.v}" ${s.v === "paid" || s.v === "confirmed" ? "checked" : ""}>${s.l}</label>`).join("")}
+          </div>`;
+        resultBox.innerHTML = "";
+        document.getElementById("doGroup").onclick = async () => {
+          const size = Number(document.getElementById("groupSize").value) || 4;
+          const checked = [...document.querySelectorAll(".group-status:checked")].map(el => el.value);
+          if (!checked.length) return alert("至少揀一個 status");
+          const { registrations } = await api("/api/admin/registrations?event_id=" + eventFilter.value);
+          const pool = (registrations || []).filter(r => checked.includes(r.status));
+          if (pool.length === 0) return alert("冇符合條件嘅人");
+          for (let i = pool.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pool[i], pool[j]] = [pool[j], pool[i]];
+          }
+          const groups = [];
+          for (let i = 0; i < pool.length; i += size) groups.push(pool.slice(i, i + size));
+          try {
+            const groupsData = groups.map(g => g.map(p => ({ id: p.id, name: p.display_name, phone: p.whatsapp })));
+            await api("/api/admin/groups", { method: "POST", body: { event_id: Number(eventFilter.value), group_size: size, statuses: checked, groups: groupsData } });
+            loadGroupUI();
+          } catch (err) { alert("分組失敗：" + (err.message || "")); }
+        };
+      }
+    }
 
-    const ALL_STATUSES = [
-      { v: "pending", l: "pending（待確認）" },
-      { v: "confirmed", l: "confirmed（已確認）" },
-      { v: "paid", l: "paid（已付款）" },
-      { v: "waitlist", l: "waitlist（候補）" },
-      { v: "rejected", l: "rejected（未獲接納）" },
-      { v: "cancelled", l: "cancelled（已取消）" },
-    ];
+    document.getElementById("loadBrackets").onclick = async () => {
+      if (!eventFilter.value) return alert("請先揀比賽");
+      const box = document.getElementById("savedBrackets");
+      box.innerHTML = "<p class='lede'>載入中...</p>";
+      try {
+        const { brackets } = await api("/api/admin/brackets?event_id=" + eventFilter.value);
+        if (!brackets?.length) { box.innerHTML = "<p class='lede'>未有已儲存淘汰賽</p>"; return; }
+        box.innerHTML = brackets.map(b => `
+          <div style="padding:0.6rem; border:1px solid #334155; border-radius:6px; margin-bottom:0.4rem; display:flex; justify-content:space-between; align-items:center;">
+            <div><strong>淘汰賽 #${b.id}</strong><span class="lede">　${(b.created_at || "").slice(0, 16)}</span></div>
+            <button class="btn small" data-load-bracket="${b.id}">載入</button>
+          </div>`).join("");
+        box.querySelectorAll("[data-load-bracket]").forEach(btn => {
+          btn.onclick = () => loadSavedBracket(Number(btn.dataset.loadBracket));
+        });
+      } catch (err) { box.innerHTML = "<p class='lede'>載入失敗</p>"; }
+    };
 
-    function manualKey(eventId) {
-      return "draw_manual_" + eventId;
+    function renderBracket(rounds, title) {
+      const box = document.getElementById("bracketArea");
+      const totalRounds = rounds.length;
+      const matchW = 150, matchH = 48, gapY = 12, connW = 36;
+      const baseCount = rounds[0].length;
+      const svgH = baseCount * (matchH + gapY) + 100;
+      const svgW = (matchW + connW) * totalRounds + 40;
+      let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;"><h3 style="margin:0">${title}</h3><button class="btn small" id="exportPdf">Export PDF</button></div><div id="printableBracket" style="overflow-x:auto; background:#0f172a; border-radius:8px; padding:1rem;"><svg width="${svgW}" height="${svgH}"><text x="${svgW/2}" y="28" fill="#f97316" font-size="15" font-weight="700" text-anchor="middle">${title}</text>`;
+      rounds.forEach((round, ri) => {
+        const x = 20 + ri * (matchW + connW);
+        const spacing = Math.pow(2, ri) * (matchH + gapY);
+        const offset = (spacing - matchH) / 2;
+        round.forEach((m, mi) => {
+          const y = 50 + mi * spacing + offset;
+          const p1 = m.p1 ? m.p1.name : "BYE";
+          const p2 = m.p2 ? m.p2.name : "BYE";
+          html += `<rect x="${x}" y="${y}" width="${matchW}" height="${matchH}" rx="4" fill="#1e2937" stroke="#475569"/><text x="${x + 8}" y="${y + 17}" fill="#e2e8f0" font-size="11">${p1}</text><line x1="${x + 6}" y1="${y + 24}" x2="${x + matchW - 6}" y2="${y + 24}" stroke="#334155"/><text x="${x + 8}" y="${y + 40}" fill="#e2e8f0" font-size="11">${p2}</text>`;
+          if (ri < totalRounds - 1) {
+            const nextSpacing = Math.pow(2, ri + 1) * (matchH + gapY);
+            const nextOffset = (nextSpacing - matchH) / 2;
+            const nextY = 50 + Math.floor(mi / 2) * nextSpacing + nextOffset + matchH / 2;
+            const midX = x + matchW + connW / 2;
+            html += `<line x1="${x + matchW}" y1="${y + matchH/2}" x2="${midX}" y2="${y + matchH/2}" stroke="#64748b" stroke-width="1.5"/><line x1="${midX}" y1="${y + matchH/2}" x2="${midX}" y2="${nextY}" stroke="#64748b" stroke-width="1.5"/><line x1="${midX}" y1="${nextY}" x2="${x + matchW + connW}" y2="${nextY}" stroke="#64748b" stroke-width="1.5"/>`;
+          }
+        });
+      });
+      html += `</svg></div>`;
+      box.innerHTML = html;
+      document.getElementById("exportPdf").onclick = () => {
+        const printWin = window.open("", "_blank");
+        printWin.document.write(`<html><head><title>${title}</title><style>body{margin:0;background:#0f172a}</style></head><body>${document.getElementById("printableBracket").innerHTML}</body></html>`);
+        printWin.document.close();
+        printWin.focus();
+        setTimeout(() => printWin.print(), 500);
+      };
+    }
+
+    async function loadSavedBracket(bracketId) {
+      try {
+        const { brackets } = await api("/api/admin/brackets?event_id=" + eventFilter.value);
+        const b = brackets.find(x => x.id === bracketId);
+        if (!b) return alert("搵唔到");
+        const rounds = JSON.parse(b.rounds || "[]");
+        const players = JSON.parse(b.players || "[]");
+        renderBracket(rounds, `淘汰賽 #${b.id}（${players.length} 人）`);
+      } catch (err) { alert(err.message || "載入失敗"); }
+    }
+
+    function field(name, label, value = "", type = "text") {
+      return `<label>${label}<input name="${name}" type="${type}" value="${String(value ?? "").replace(/"/g, "&quot;")}" /></label>`;
+    }
+
+    function renderEditor(ev = {}) {
+      editor.classList.remove("hidden");
+      const cats = Array.isArray(ev.categories) ? ev.categories.join(",") : (ev.categories || "U12,公開組");
+      editor.innerHTML = `
+        <h3>${ev.id ? "編輯場次" : "開新場次"}</h3>
+        <form id="evForm">
+          <label>類型<select name="event_kind"><option value="tournament" ${ev.event_kind !== "funplay" ? "selected" : ""}>比賽</option><option value="funplay" ${ev.event_kind === "funplay" ? "selected" : ""}>Fun Play</option></select></label>
+          <div class="row2">${field("title", "名稱", ev.title || "")}${field("slug", "Slug（網址）", ev.slug || "")}</div>
+          ${field("subtitle", "副題", ev.subtitle || "")}
+          <div class="row2">${field("venue", "場地", ev.venue || "")}${field("address", "地址", ev.address || "")}</div>
+          <div class="row2">${field("event_date", "日期", ev.event_date || "", "date")}${field("registration_deadline", "報名截止", ev.registration_deadline || "")}</div>
+          <div class="row2">${field("start_time", "開始", ev.start_time || "", "time")}${field("end_time", "結束", ev.end_time || "", "time")}</div>
+          <div class="row2">${field("capacity", "名額", ev.capacity ?? 32, "number")}${field("entry_fee", "報名費", ev.entry_fee ?? 50, "number")}</div>
+          ${field("categories", "組別（逗號分隔）", cats)}
+          <label>簡介<textarea name="description">${ev.description || ""}</textarea></label>
+          <label>規則<textarea name="rules">${ev.rules || ""}</textarea></label>
+          <div class="row2">${field("payme_id", "PayMe 號碼／ID", ev.payme_id || "")}${field("payme_link", "PayMe 連結", ev.payme_link || "")}</div>
+          <div class="row2">${field("fps_id", "FPS 電話／識別碼", ev.fps_id || "")}${field("fps_name", "FPS 戶名", ev.fps_name || "")}</div>
+          ${field("whatsapp", "主辦 WhatsApp", ev.whatsapp || "")}
+          <label>付款備註<textarea name="payment_note">${ev.payment_note || "確認後請轉帳，備註填 Belader 名稱。"}</textarea></label>
+          ${ev.poster_url ? `<p><img class="poster" src="${ev.poster_url}" alt="海報" /></p><button class="btn bad" type="button" id="delPoster">移除海報</button>` : ""}
+          <label>上傳海報<input type="file" id="posterFile" accept="image/jpeg,image/png,image/webp,image/gif" /></label>
+          <label>或貼海報圖片網址<input name="poster_url" value="${String(ev.poster_url || "").startsWith("http") || String(ev.poster_url || "").startsWith("/") ? String(ev.poster_url).replace(/"/g, "&quot;") : ""}" placeholder="https://..." /></label>
+          <label><input type="checkbox" name="registration_open" ${ev.registration_open !== false ? "checked" : ""} /> 開放報名</label>
+          <label><input type="checkbox" name="show_public_list" ${ev.show_public_list ? "checked" : ""} /> 公開已報名名單</label>
+          <div class="toolbar"><button class="btn" type="submit">儲存</button><button class="btn ghost" type="button" id="cancelEv">取消</button>${ev.id ? `<button class="btn bad" type="button" id="delEv">刪除比賽</button>` : ""}</div>
+        </form>`;
+      document.getElementById("cancelEv").onclick = () => editor.classList.add("hidden");
+      document.getElementById("evForm").onsubmit = async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const body = Object.fromEntries(fd.entries());
+        body.registration_open = fd.get("registration_open") === "on";
+        body.show_public_list = fd.get("show_public_list") === "on";
+        body.capacity = Number(body.capacity);
+        body.entry_fee = Number(body.entry_fee);
+        try {
+          let id = ev.id;
+          if (id) await api("/api/admin/events/" + id, { method: "PUT", body });
+          else { const created = await api("/api/admin/events", { method: "POST", body }); id = created.id; }
+          const file = document.getElementById("posterFile")?.files?.[0];
+          if (id && (file || (body.poster_url && !String(body.poster_url).startsWith("data:")))) {
+            const fdPoster = new FormData();
+            if (file) fdPoster.append("file", file);
+            if (body.poster_url) fdPoster.append("poster_url", body.poster_url);
+            const token = localStorage.getItem("beyx_admin");
+            const res = await fetch("/api/admin/events/" + id + "/poster", { method: "POST", headers: { authorization: "Bearer " + token }, body: fdPoster });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.ok === false) throw new Error(data.error || "海報上傳失敗");
+          }
+          editor.classList.add("hidden");
+          await boot();
+        } catch (err) { alert(err.message || "儲存失敗"); }
+      };
+      const del = document.getElementById("delEv");
+      if (del) del.onclick = async () => {
+        if (!confirm("刪除比賽同全部報名？")) return;
+        await api("/api/admin/events/" + ev.id, { method: "DELETE" });
+        editor.classList.add("hidden");
+        await boot();
+      };
+      const delPoster = document.getElementById("delPoster");
+      if (delPoster) delPoster.onclick = async () => {
+        if (!ev.id) return;
+        if (!confirm("移除呢張海報？")) return;
+        try { await api("/api/admin/events/" + ev.id + "/poster", { method: "DELETE" }); ev.poster_url = ""; renderEditor(ev); }
+        catch (err) { alert(err.message || "移除失敗"); }
+      };
+    }
+
+    async function loadRegs() {
+      const qs = new URLSearchParams();
+      if (!eventFilter.value) {
+        document.getElementById("regTitle").textContent = "報名名單";
+        document.getElementById("regs").innerHTML = "<p class='lede'>請先喺上面揀一場比賽。</p>";
+        return;
+      }
+      qs.set("event_id", eventFilter.value);
+      localStorage.setItem("beyx_admin_event", eventFilter.value);
+      const ev = events.find((e) => String(e.id) === eventFilter.value);
+      document.getElementById("regTitle").textContent = ev ? `報名名單 — ${ev.title}` : "報名名單";
+      if (statusFilter.value) qs.set("status", statusFilter.value);
+      const { registrations } = await api("/api/admin/registrations?" + qs.toString());
+      const box = document.getElementById("regs");
+      if (!registrations.length) { box.innerHTML = "<p class='lede'>未有報名。</p>"; return; }
+      const counts = {};
+      registrations.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
+      const total = registrations.length;
+      const countHtml = `<div style="display:flex; flex-wrap:wrap; gap:0.6rem; margin-bottom:0.8rem; font-size:0.85rem;">
+        <span class="pill" style="cursor:pointer" data-filter="">全部 ${total}</span>
+        <span class="pill" style="cursor:pointer" data-filter="pending">待確認 ${counts.pending || 0}</span>
+        <span class="pill" style="cursor:pointer" data-filter="confirmed">已確認 ${counts.confirmed || 0}</span>
+        <span class="pill" style="cursor:pointer" data-filter="paid">已付款 ${counts.paid || 0}</span>
+        <span class="pill" style="cursor:pointer" data-filter="waitlist">候補 ${counts.waitlist || 0}</span>
+        <span class="pill" style="cursor:pointer" data-filter="rejected">未獲接納 ${counts.rejected || 0}</span>
+      </div>`;
+      box.innerHTML = countHtml + `<table><thead><tr><th>時間</th><th>玩家</th><th>聯絡</th><th>組別</th><th>狀態</th><th>動作</th></tr></thead><tbody>
+        ${registrations.map(r => `<tr><td>${formatHKT(r.created_at)}</td><td><strong>${r.display_name}</strong><br>${r.real_name || ""}<br><span class="lede">${r.notes || ""}</span></td><td>${r.whatsapp}</td><td>${r.category || ""}</td><td>${statusPill(r.status)}<br><span class="lede">${r.paid_ref || ""}</span></td><td><div class="toolbar"><button class="btn small ok" data-act="confirmed" data-id="${r.id}">確認</button><button class="btn small" data-act="paid" data-id="${r.id}">已收款</button><button class="btn small warn" data-act="waitlist" data-id="${r.id}">候補</button><button class="btn small bad" data-act="rejected" data-id="${r.id}">拒絕</button><button class="btn small ghost" data-wa="${encodeURIComponent(r.whatsapp || "")}" data-msg="${encodeURIComponent(r.wa_message || "")}">開啟 WhatsApp</button><button class="btn small ghost" data-add-draw="${r.id}">加入抽選</button></div></td></tr>`).join("")}
+      </tbody></table>`;
+      box.querySelectorAll("[data-filter]").forEach(el => { el.onclick = () => { statusFilter.value = el.dataset.filter; loadRegs(); }; });
+      box.querySelectorAll("[data-act]").forEach(btn => {
+        btn.onclick = async () => {
+          let paid_ref = "";
+          if (btn.dataset.act === "paid") paid_ref = prompt("付款備註（可選）", "") || "";
+          const data = await api("/api/admin/registrations/" + btn.dataset.id, { method: "PATCH", body: { status: btn.dataset.act, paid_ref } });
+          if (btn.dataset.act === "confirmed" && data.wa_message) { await navigator.clipboard.writeText(data.wa_message).catch(() => {}); alert("已確認，WhatsApp 訊息已複製。"); }
+          await loadRegs();
+        };
+      });
+      box.querySelectorAll("[data-wa]").forEach(btn => {
+        btn.onclick = () => {
+          const phone = decodeURIComponent(btn.dataset.wa).replace(/\D/g, "");
+          const msg = decodeURIComponent(btn.dataset.msg);
+          if (!phone) return alert("冇電話號碼");
+          window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
+        };
+      });
+      box.querySelectorAll("[data-add-draw]").forEach(btn => {
+        btn.onclick = () => {
+          const eventId = eventFilter.value;
+          if (!eventId) return;
+          const key = manualKey(eventId);
+          const arr = JSON.parse(localStorage.getItem(key) || "[]");
+          const id = Number(btn.dataset.addDraw);
+          if (!arr.includes(id)) arr.push(id);
+          localStorage.setItem(key, JSON.stringify(arr));
+          btn.textContent = "已加入";
+          btn.disabled = true;
+        };
+      });
     }
 
     async function loadDrawUI() {
       const box = document.getElementById("drawControls");
-      if (!eventFilter.value) {
-        box.innerHTML = "<p class='lede'>請先揀一場比賽</p>";
-        return;
-      }
+      if (!eventFilter.value) { box.innerHTML = "<p class='lede'>請先揀一場比賽</p>"; return; }
       const eventId = eventFilter.value;
-
       box.innerHTML = `
-        <div class="toolbar">
-          <label>抽幾個
-            <input type="number" id="drawCount" value="8" min="1" style="width:70px">
-          </label>
-          <button class="btn small ghost" id="selectAllStatus" type="button">全選</button>
-          <button class="btn small ghost" id="clearStatus" type="button">清除</button>
-          <button class="btn" id="startDraw" type="button">開始抽選</button>
-        </div>
-        <div style="margin-top:0.6rem; display:flex; flex-wrap:wrap; gap:0.8rem;">
-          ${ALL_STATUSES.map(s => `
-            <label style="display:inline-flex; align-items:center; gap:0.3rem;">
-              <input type="checkbox" class="status-chk" value="${s.v}" ${s.v === "paid" ? "checked" : ""}>
-              ${s.l}
-            </label>
-          `).join("")}
-        </div>
-        
-      `;
-
-      document.getElementById("selectAllStatus").onclick = () => {
-        document.querySelectorAll(".status-chk").forEach(el => el.checked = true);
-      };
-      document.getElementById("clearStatus").onclick = () => {
-        document.querySelectorAll(".status-chk").forEach(el => el.checked = false);
-      };
-
+        <div class="toolbar"><label>抽幾個<input type="number" id="drawCount" value="8" min="1" style="width:70px"></label><button class="btn small ghost" id="selectAllStatus" type="button">全選</button><button class="btn small ghost" id="clearStatus" type="button">清除</button><button class="btn" id="startDraw" type="button">開始抽選</button></div>
+        <div style="margin-top:0.6rem; display:flex; flex-wrap:wrap; gap:0.8rem;">${ALL_STATUSES.map(s => `<label style="display:inline-flex; align-items:center; gap:0.3rem;"><input type="checkbox" class="status-chk" value="${s.v}" ${s.v === "paid" ? "checked" : ""}>${s.l}</label>`).join("")}</div>`;
+      document.getElementById("selectAllStatus").onclick = () => { document.querySelectorAll(".status-chk").forEach(el => el.checked = true); };
+      document.getElementById("clearStatus").onclick = () => { document.querySelectorAll(".status-chk").forEach(el => el.checked = false); };
       document.getElementById("startDraw").onclick = async () => {
         const count = Number(document.getElementById("drawCount").value) || 1;
         const checked = [...document.querySelectorAll(".status-chk:checked")].map(el => el.value);
         if (!checked.length) return alert("至少揀一個 status");
-
         const manual = JSON.parse(localStorage.getItem(manualKey(eventId)) || "[]");
         const anim = document.getElementById("drawAnim");
         anim.textContent = "準備中...";
-
         try {
-          const data = await api("/api/admin/draws", {
-            method: "POST",
-            body: {
-              event_id: Number(eventId),
-              count,
-              statuses: checked,
-              manual_include: manual,
-            },
-          });
-
+          const data = await api("/api/admin/draws", { method: "POST", body: { event_id: Number(eventId), count, statuses: checked, manual_include: manual } });
           const names = data.candidates.map(c => c.name);
-          if (!names.length) {
-            anim.textContent = "冇候選";
-            return;
-          }
-
+          if (!names.length) { anim.textContent = "冇候選"; return; }
           let i = 0;
-          const timer = setInterval(() => {
-            anim.textContent = names[i % names.length];
-            i++;
-          }, 70);
-
+          const timer = setInterval(() => { anim.textContent = names[i % names.length]; i++; }, 70);
           setTimeout(async () => {
             clearInterval(timer);
-            const winnerNames = data.selected.map(s => s.name).join("、");
-            anim.innerHTML = `<span style="color:#16a34a">抽中：${winnerNames}</span>`;
-
+            anim.innerHTML = `<span style="color:#16a34a">抽中：${data.selected.map(s => s.name).join("、")}</span>`;
             const { registrations } = await api("/api/admin/registrations?event_id=" + eventId);
-            const regMap = {};
-            (registrations || []).forEach(r => { regMap[r.id] = r; });
-
-            document.getElementById("drawResult").innerHTML = `
-              <p><strong>結果（${data.selected.length} 人）：</strong></p>
-              <ul style="margin:0.3rem 0 0 1.2rem; line-height:1.6;">
-                ${data.selected.map(s => {
-                  const r = regMap[s.id];
-                  const phone = r?.whatsapp || "";
-                  return `<li><strong>${s.name}</strong>　${phone}</li>`;
-                }).join("")}
-              </ul>
-            `;
+            const regMap = {}; (registrations || []).forEach(r => { regMap[r.id] = r; });
+            document.getElementById("drawResult").innerHTML = `<p><strong>結果（${data.selected.length} 人）：</strong></p><ul style="margin:0.3rem 0 0 1.2rem; line-height:1.6;">${data.selected.map(s => { const r = regMap[s.id]; return `<li><strong>${s.name}</strong>　${r?.whatsapp || ""}</li>`; }).join("")}</ul>`;
             localStorage.removeItem(manualKey(eventId));
             loadDrawHistory();
             loadRegs();
           }, 2200);
-        } catch (err) {
-          anim.textContent = "";
-          alert(err.message || "抽選失敗");
-        }
+        } catch (err) { anim.textContent = ""; alert(err.message || "抽選失敗"); }
       };
-
       loadDrawHistory();
     }
 
     async function loadDrawHistory() {
       const box = document.getElementById("drawHistory");
-      if (!eventFilter.value) {
-        box.innerHTML = "";
-        return;
-      }
+      if (!eventFilter.value) { box.innerHTML = ""; return; }
       try {
         const { draws } = await api("/api/admin/draws?event_id=" + eventFilter.value);
-        if (!draws?.length) {
-          box.innerHTML = "<p class='lede'>未有抽選記錄</p>";
-          return;
-        }
-
+        if (!draws?.length) { box.innerHTML = "<p class='lede'>未有抽選記錄</p>"; return; }
         const latest = draws[0];
         const resultIds = JSON.parse(latest.result_ids || "[]");
         const statuses = JSON.parse(latest.statuses || "[]").join(", ");
-
         const { registrations } = await api("/api/admin/registrations?event_id=" + eventFilter.value);
-        const regMap = {};
-        (registrations || []).forEach(r => { regMap[r.id] = r; });
-
-        const listHtml = resultIds.map(id => {
-          const r = regMap[id];
-          if (!r) return `<li>未知</li>`;
-          return `<li><strong>${r.display_name}</strong>　${r.whatsapp}</li>`;
-        }).join("");
-
-        box.innerHTML = `
-          <h4 style="margin:0 0 0.5rem">最近一次抽選</h4>
-          <p class="lede" style="margin:0 0 0.4rem">
-            ${(latest.created_at || "").slice(0, 16)} · 抽 ${latest.count_needed} 個 · status: ${statuses}
-          </p>
-          <ul style="margin:0; padding-left:1.2rem; line-height:1.6;">
-            ${listHtml}
-          </ul>
-          <div style="margin-top:0.8rem">
-            <p class="lede">剔選資格不符嘅人，然後補位：</p>
-            <div id="disqualifyList" style="margin:0.4rem 0"></div>
-            <button class="btn small" id="doReplace" type="button">移除並補位</button>
-          </div>
-        `;
-
+        const regMap = {}; (registrations || []).forEach(r => { regMap[r.id] = r; });
+        const listHtml = resultIds.map(id => { const r = regMap[id]; return r ? `<li><strong>${r.display_name}</strong>　${r.whatsapp}</li>` : `<li>未知</li>`; }).join("");
+        box.innerHTML = `<h4 style="margin:0 0 0.5rem">最近一次抽選</h4><p class="lede" style="margin:0 0 0.4rem">${(latest.created_at || "").slice(0, 16)} · 抽 ${latest.count_needed} 個 · status: ${statuses}</p><ul style="margin:0; padding-left:1.2rem; line-height:1.6;">${listHtml}</ul><div style="margin-top:0.8rem"><p class="lede">剔選資格不符嘅人，然後補位：</p><div id="disqualifyList" style="margin:0.4rem 0"></div><button class="btn small" id="doReplace" type="button">移除並補位</button></div>`;
         const listBox = document.getElementById("disqualifyList");
-        listBox.innerHTML = resultIds.map(id => {
-          const r = regMap[id];
-          const name = r ? `${r.display_name}　${r.whatsapp}` : `ID ${id}`;
-          return `<label style="display:flex; align-items:center; gap:0.6rem; margin:0.35rem 0; cursor:pointer;">
-            <input type="checkbox" class="dq-chk" value="${id}" style="width:18px; height:18px; flex-shrink:0;">
-            <span>${name}</span>
-          </label>`;
-        }).join("");
-
+        listBox.innerHTML = resultIds.map(id => { const r = regMap[id]; const name = r ? `${r.display_name}　${r.whatsapp}` : `ID ${id}`; return `<label style="display:flex; align-items:center; gap:0.6rem; margin:0.35rem 0; cursor:pointer;"><input type="checkbox" class="dq-chk" value="${id}" style="width:18px; height:18px; flex-shrink:0;"><span>${name}</span></label>`; }).join("");
         document.getElementById("doReplace").onclick = async () => {
           const removeIds = [...document.querySelectorAll(".dq-chk:checked")].map(el => Number(el.value));
           if (!removeIds.length) return alert("請先剔選要移除嘅人");
           if (!confirm(`確定移除 ${removeIds.length} 人並補位？`)) return;
-
           try {
-            const data = await api(`/api/admin/draws/${latest.id}/replace`, {
-              method: "POST",
-              body: { remove_ids: removeIds },
-            });
+            const data = await api(`/api/admin/draws/${latest.id}/replace`, { method: "POST", body: { remove_ids: removeIds } });
             alert(`已移除 ${data.removed} 人，補入 ${data.added.length} 人`);
             loadDrawHistory();
-          } catch (err) {
-            alert(err.message || "補位失敗");
-          }
+          } catch (err) { alert(err.message || "補位失敗"); }
         };
-      } catch (err) {
-        box.innerHTML = "<p class='lede'>載入抽選記錄失敗</p>";
-      }
+      } catch (err) { box.innerHTML = "<p class='lede'>載入抽選記錄失敗</p>"; }
     }
 
     async function generateBracket() {
-  if (!eventFilter.value) return alert("請先揀比賽");
-  if (!confirm("用最近一次抽選結果生成淘汰賽？")) return;
-
-  try {
-    const data = await api("/api/admin/brackets", {
-      method: "POST",
-      body: { event_id: Number(eventFilter.value) },
-    });
-
-    const box = document.getElementById("bracketArea");
-    const rounds = data.rounds;
-    const totalRounds = rounds.length;
-
-    // 計算每輪高度同位置
-    const matchHeight = 70;
-    const gap = 20;
-    const roundWidth = 200;
-    const connectorWidth = 50;
-
-    let html = `<h3 style="margin-bottom:1rem">淘汰賽名單（${data.players.length} 人，${data.byes} 個 bye）</h3>`;
-    html += `<div style="overflow-x:auto; padding:1rem 0;">`;
-    html += `<svg id="bracketSvg" style="width:${(roundWidth + connectorWidth) * totalRounds}px; height:${rounds[0].length * (matchHeight + gap)}px;">`;
-
-    // 畫每一輪
-    rounds.forEach((round, ri) => {
-      const x = ri * (roundWidth + connectorWidth);
-      const matchesInThisRound = round.length;
-      const verticalSpacing = Math.pow(2, ri) * (matchHeight + gap);
-
-      round.forEach((m, mi) => {
-        const y = mi * verticalSpacing + (verticalSpacing - matchHeight) / 2;
-
-        // 比賽卡片
-        const p1 = m.p1 ? `${m.p1.name}<tspan x="${x + 10}" dy="16" font-size="11" opacity="0.6">${m.p1.phone || ""}</tspan>` : "BYE";
-        const p2 = m.p2 ? `${m.p2.name}<tspan x="${x + 10}" dy="16" font-size="11" opacity="0.6">${m.p2.phone || ""}</tspan>` : "BYE";
-
-        html += `
-          <rect x="${x}" y="${y}" width="${roundWidth}" height="${matchHeight}" rx="6" fill="#1e2937" stroke="#475569"/>
-          <text x="${x + 10}" y="${y + 22}" fill="#e2e8f0" font-size="13">${p1}</text>
-          <line x1="${x + 8}" y1="${y + 35}" x2="${x + roundWidth - 8}" y2="${y + 35}" stroke="#334155"/>
-          <text x="${x + 10}" y="${y + 52}" fill="#e2e8f0" font-size="13">${p2}</text>
-        `;
-
-        // 連接線（連去下一輪）
-        if (ri < totalRounds - 1) {
-          const nextY = Math.floor(mi / 2) * (verticalSpacing * 2) + (verticalSpacing * 2 - matchHeight) / 2 + matchHeight / 2;
-          const midX = x + roundWidth + connectorWidth / 2;
-
-          html += `
-            <line x1="${x + roundWidth}" y1="${y + matchHeight / 2}" x2="${midX}" y2="${y + matchHeight / 2}" stroke="#64748b" stroke-width="2"/>
-            <line x1="${midX}" y1="${y + matchHeight / 2}" x2="${midX}" y2="${nextY}" stroke="#64748b" stroke-width="2"/>
-            <line x1="${midX}" y1="${nextY}" x2="${x + roundWidth + connectorWidth}" y2="${nextY}" stroke="#64748b" stroke-width="2"/>
-          `;
-        }
-      });
-
-      // 輪次標題
-      html += `<text x="${x + roundWidth / 2}" y="20" fill="#f97316" font-size="14" font-weight="700" text-anchor="middle">${ri === 0 ? "第一輪" : ri === totalRounds - 1 ? "決賽" : "第 " + (ri + 1) + " 輪"}</text>`;
-    });
-
-    html += `</svg></div>`;
-    box.innerHTML = html;
-  } catch (err) {
-    alert(err.message || "生成失敗");
-  }
-}
+      if (!eventFilter.value) return alert("請先揀比賽");
+      if (!confirm("用最近一次抽選結果生成淘汰賽？")) return;
+      try {
+        const data = await api("/api/admin/brackets", { method: "POST", body: { event_id: Number(eventFilter.value) } });
+        renderBracket(data.rounds, `淘汰賽（${data.players.length} 人）`);
+      } catch (err) { alert(err.message || "生成失敗"); }
+    }
 
     document.getElementById("genBracket").onclick = generateBracket;
 
     async function boot() {
+      currentRole = localStorage.getItem("beyx_admin_role") || "";
+      document.getElementById("tabAdmins").style.display = currentRole === "superadmin" ? "" : "none";
       const data = await api("/api/admin/events");
       events = data.events || [];
       const saved = localStorage.getItem("beyx_admin_event");
       const keep = eventFilter.value || saved || (events[0] ? String(events[0].id) : "");
-      eventFilter.innerHTML = events.length
-        ? events.map(ev =>
-            `<option value="${ev.id}">${ev.event_kind === "funplay" ? "[Fun Play] " : "[比賽] "}${ev.title}（確認 ${ev.counts?.taken || 0}/${ev.capacity}）</option>`
-          ).join("")
-        : `<option value="">未有比賽</option>`;
+      eventFilter.innerHTML = events.length ? events.map(ev => `<option value="${ev.id}">${ev.event_kind === "funplay" ? "[Fun Play] " : "[比賽] "}${ev.title}（確認 ${ev.counts?.taken || 0}/${ev.capacity}）</option>`).join("") : `<option value="">未有比賽</option>`;
       if (keep && events.some((e) => String(e.id) === String(keep))) eventFilter.value = keep;
       await loadRegs();
       await loadDrawUI();
@@ -905,8 +595,7 @@ const countHtml = `
     document.getElementById("newEvent").onclick = () => renderEditor({});
     document.getElementById("editEvent").onclick = () => {
       const ev = events.find((e) => String(e.id) === eventFilter.value);
-      if (ev) renderEditor(ev);
-      else alert("請先揀一場比賽");
+      if (ev) renderEditor(ev); else alert("請先揀一場比賽");
     };
     document.getElementById("reload").onclick = boot;
     eventFilter.onchange = () => { loadRegs(); loadDrawUI(); loadGroupUI(); };
@@ -914,11 +603,12 @@ const countHtml = `
 
     if (authed()) {
       showApp(true);
+      currentRole = localStorage.getItem("beyx_admin_role") || "";
+      document.getElementById("whoami").textContent = `已登入（${currentRole}）`;
+      document.getElementById("tabAdmins").style.display = currentRole === "superadmin" ? "" : "none";
       boot().catch((e) => {
-        if (String(e.message).includes("未授權")) {
-          localStorage.removeItem("beyx_admin");
-          showApp(false);
-        } else alert(e.message);
+        if (String(e.message).includes("未授權")) { localStorage.removeItem("beyx_admin"); showApp(false); }
+        else alert(e.message);
       });
     }
   </script>
