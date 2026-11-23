@@ -312,22 +312,56 @@ async function handleApi(request, env) {
       return json({ ok: true, event: adminEvent(row) });
     }
 
-    const adminPoster = path.match(/^\/api\/admin\/events\/(\d+)\/poster$/);
-    if (adminPoster && (method === "POST" || method === "DELETE")) {
-      const denied = await requireAdmin(ctx);
-      if (denied) return denied;
-      const id = Number(adminPoster[1]);
-      const existing = await env.DB.prepare("SELECT * FROM events WHERE id = ?").bind(id).first();
-      if (!existing) return error("找不到比賽", 404);
+  const adminPoster = path.match(/^\/api\/admin\/events\/(\d+)\/poster$/);
+if (adminPoster && (method === "POST" || method === "DELETE")) {
+  const denied = await requireAdmin(ctx);
+  if (denied) return denied;
+  const id = Number(adminPoster[1]);
+  const existing = await env.DB.prepare("SELECT * FROM events WHERE id = ?").bind(id).first();
+  if (!existing) return error("找不到比賽", 404);
 
-      if (method === "DELETE") {
-        if (env.POSTERS) await env.POSTERS.delete("posters/" + id).catch(() => {});
-        await env.DB.prepare("UPDATE events SET poster_url='', updated_at=? WHERE id=?").bind(nowIso(), id).run();
-        return json({ ok: true, poster_url: "" });
+  if (method === "DELETE") {
+    if (env.POSTERS) await env.POSTERS.delete("posters/" + id).catch(() => {});
+    await env.DB.prepare("UPDATE events SET poster_url='', updated_at=? WHERE id=?").bind(nowIso(), id).run();
+    return json({ ok: true, poster_url: "" });
+  }
+
+  // POST: 上傳海報
+  const contentType = request.headers.get("content-type") || "";
+  let poster_url = "";
+
+  if (contentType.includes("multipart/form-data")) {
+    const form = await request.formData();
+    const file = form.get("file");
+    const urlField = form.get("poster_url");
+
+    if (file && file.size) {
+      if (file.size > 4 * 1024 * 1024) return error("檔案太大（上限 4MB）");
+      const ext = (file.name || "").split(".").pop()?.toLowerCase() || "jpg";
+      const key = "posters/" + id;
+      if (env.POSTERS) {
+        await env.POSTERS.put(key, file.stream(), {
+          httpMetadata: { contentType: file.type || "image/jpeg" },
+        });
+        poster_url = "/media/posters/" + id;
+      } else {
+        // 冇 R2，轉 base64 存入 DB（只建議細圖）
+        const buf = await file.arrayBuffer();
+        const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+        poster_url = `data:${file.type || "image/jpeg"};base64,${b64}`;
       }
-
-      // (保留原本 poster upload 邏輯)
+    } else if (urlField) {
+      poster_url = cleanText(urlField, 2000);
     }
+  } else {
+    const body = await readJson(request);
+    if (body?.poster_url) poster_url = cleanText(body.poster_url, 2000);
+  }
+
+  if (!poster_url) return error("冇收到海報");
+  await savePosterUrl(env.DB, id, poster_url);
+  return json({ ok: true, poster_url });
+}
 
     if (adminEv && method === "DELETE") {
       const denied = await requireAdmin(ctx);
