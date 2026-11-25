@@ -495,16 +495,27 @@ if (adminPoster && (method === "POST" || method === "DELETE")) {
         }
       }
 
-      if (!pool.length) return error("冇符合條件嘅人");
+if (!pool.length) return error("冇符合條件嘅人");
 
-      // 打亂
-      for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [pool[i], pool[j]] = [pool[j], pool[i]];
-      }
+// 手動加入嘅人強制入選
+const forced = [];
+const rest = [];
+const manualSet = new Set(manualInclude);
+for (const p of pool) {
+  if (manualSet.has(p.id)) forced.push(p);
+  else rest.push(p);
+}
 
-      const selected = pool.slice(0, Math.min(count, pool.length));
-      const resultIds = selected.map(s => s.id);
+// 打亂其餘人
+for (let i = rest.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [rest[i], rest[j]] = [rest[j], rest[i]];
+}
+
+// 強制入選 + 補足
+const need = Math.max(0, count - forced.length);
+const selected = [...forced, ...rest.slice(0, need)];
+const resultIds = selected.map(s => s.id);
 
       const ins = await env.DB.prepare(
         `INSERT INTO draws (event_id, count_needed, statuses, result_ids, created_at)
