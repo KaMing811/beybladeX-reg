@@ -512,11 +512,16 @@ for (let i = rest.length - 1; i > 0; i--) {
   [rest[i], rest[j]] = [rest[j], rest[i]];
 }
 
-// 強制入選 + 補足
 const need = Math.max(0, count - forced.length);
-const selected = [...forced, ...rest.slice(0, need)];
-const resultIds = selected.map(s => s.id);
+let selected = [...forced, ...rest.slice(0, need)];
 
+// 最終顯示打亂次序
+for (let i = selected.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [selected[i], selected[j]] = [selected[j], selected[i]];
+}
+
+const resultIds = selected.map(s => s.id);
       const ins = await env.DB.prepare(
         `INSERT INTO draws (event_id, count_needed, statuses, result_ids, created_at)
          VALUES (?, ?, ?, ?, ?)`
