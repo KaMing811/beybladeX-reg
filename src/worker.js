@@ -455,6 +455,196 @@ if (adminPoster && (method === "POST" || method === "DELETE")) {
 
     // ===== Draws & Brackets (保留原本邏輯，只需確保 requireAdmin) =====
     // ... 將你原本嘅 draws 同 brackets 代碼放返入去 ...
+        // ===== Draws =====
+    if (path === "/api/admin/draws" && method === "GET") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const eventId = url.searchParams.get("event_id");
+      if (!eventId) return error("缺少 event_id");
+      const rows = await env.DB.prepare(
+        "SELECT * FROM draws WHERE event_id = ? ORDER BY id DESC LIMIT 20"
+      ).bind(Number(eventId)).all();
+      return json({ ok: true, draws: rows.results || [] });
+    }
+
+    if (path === "/api/admin/draws" && method === "POST") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const body = await readJson(request);
+      if (!body) return error("無效資料");
+      const eventId = Number(body.event_id);
+      const count = Number(body.count) || 1;
+      const statuses = Array.isArray(body.statuses) ? body.statuses : ["paid"];
+      const manualInclude = Array.isArray(body.manual_include) ? body.manual_include.map(Number) : [];
+      if (!eventId) return error("缺少 event_id");
+
+      const placeholders = statuses.map(() => "?").join(",");
+      const regs = await env.DB.prepare(
+        `SELECT id, display_name FROM registrations WHERE event_id = ? AND status IN (${placeholders})`
+      ).bind(eventId, ...statuses).all();
+      let pool = (regs.results || []).map(r => ({ id: r.id, name: r.display_name }));
+
+      // 手動加入（即使 status 唔符合）
+      if (manualInclude.length) {
+        const extra = await env.DB.prepare(
+          `SELECT id, display_name FROM registrations WHERE event_id = ? AND id IN (${manualInclude.map(() => "?").join(",")})`
+        ).bind(eventId, ...manualInclude).all();
+        const existIds = new Set(pool.map(p => p.id));
+        for (const r of extra.results || []) {
+          if (!existIds.has(r.id)) pool.push({ id: r.id, name: r.display_name });
+        }
+      }
+
+      if (!pool.length) return error("冇符合條件嘅人");
+
+      // 打亂
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+
+      const selected = pool.slice(0, Math.min(count, pool.length));
+      const resultIds = selected.map(s => s.id);
+
+      const ins = await env.DB.prepare(
+        `INSERT INTO draws (event_id, count_needed, statuses, result_ids, created_at)
+         VALUES (?, ?, ?, ?, ?)`
+      ).bind(eventId, count, JSON.stringify(statuses), JSON.stringify(resultIds), nowIso()).run();
+
+      return json({
+        ok: true,
+        draw_id: ins.meta.last_row_id,
+        candidates: pool,
+        selected,
+      });
+    }
+
+    const drawReplace = path.match(/^\/api\/admin\/draws\/(\d+)\/replace$/);
+    if (drawReplace && method === "POST") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const drawId = Number(drawReplace[1]);
+      const body = await readJson(request);
+      if (!body) return error("無效資料");
+      const removeIds = Array.isArray(body.remove_ids) ? body.remove_ids.map(Number) : [];
+      if (!removeIds.length) return error("冇要移除嘅人");
+
+      const draw = await env.DB.prepare("SELECT * FROM draws WHERE id = ?").bind(drawId).first();
+      if (!draw) return error("找不到抽選", 404);
+
+      let resultIds = JSON.parse(draw.result_ids || "[]");
+      const removeSet = new Set(removeIds);
+      resultIds = resultIds.filter(id => !removeSet.has(id));
+
+      // 重新抽補位
+      const statuses = JSON.parse(draw.statuses || "[]");
+      const placeholders = statuses.map(() => "?").join(",");
+      const regs = await env.DB.prepare(
+        `SELECT id, display_name FROM registrations WHERE event_id = ? AND status IN (${placeholders})`
+      ).bind(draw.event_id, ...statuses).all();
+      let pool = (regs.results || []).map(r => ({ id: r.id, name: r.display_name }));
+      const used = new Set(resultIds);
+      pool = pool.filter(p => !used.has(p.id));
+
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+
+      const need = removeIds.length;
+      const added = pool.slice(0, Math.min(need, pool.length));
+      resultIds.push(...added.map(a => a.id));
+
+      await env.DB.prepare(
+        "UPDATE draws SET result_ids = ? WHERE id = ?"
+      ).bind(JSON.stringify(resultIds), drawId).run();
+
+      return json({ ok: true, removed: removeIds.length, added, result_ids: resultIds });
+    }
+
+    // ===== Brackets =====
+    if (path === "/api/admin/brackets" && method === "GET") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const eventId = url.searchParams.get("event_id");
+      if (!eventId) return error("缺少 event_id");
+      const rows = await env.DB.prepare(
+        "SELECT * FROM brackets WHERE event_id = ? ORDER BY id DESC LIMIT 10"
+      ).bind(Number(eventId)).all();
+      return json({ ok: true, brackets: rows.results || [] });
+    }
+
+    if (path === "/api/admin/brackets" && method === "POST") {
+      const denied = await requireAdmin(ctx);
+      if (denied) return denied;
+      const body = await readJson(request);
+      if (!body) return error("無效資料");
+      const eventId = Number(body.event_id);
+      if (!eventId) return error("缺少 event_id");
+
+      // 用最近一次抽選
+      const latestDraw = await env.DB.prepare(
+        "SELECT * FROM draws WHERE event_id = ? ORDER BY id DESC LIMIT 1"
+      ).bind(eventId).first();
+      if (!latestDraw) return error("未有抽選記錄");
+
+      const resultIds = JSON.parse(latestDraw.result_ids || "[]");
+      if (!resultIds.length) return error("抽選結果係空");
+
+      const regs = await env.DB.prepare(
+        `SELECT id, display_name, whatsapp FROM registrations WHERE id IN (${resultIds.map(() => "?").join(",")})`
+      ).bind(...resultIds).all();
+      const regMap = {};
+      (regs.results || []).forEach(r => { regMap[r.id] = r; });
+
+      let players = resultIds.map(id => {
+        const r = regMap[id];
+        return r ? { id: r.id, name: r.display_name, phone: r.whatsapp } : null;
+      }).filter(Boolean);
+
+      // 打亂次序
+      for (let i = players.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [players[i], players[j]] = [players[j], players[i]];
+      }
+
+      // 生成淘汰賽 rounds
+      const n = players.length;
+      const size = Math.pow(2, Math.ceil(Math.log2(n)));
+      const byes = size - n;
+      const rounds = [];
+      let current = [...players];
+      while (current.length < size) current.push(null);
+
+      while (current.length > 1) {
+        const round = [];
+        for (let i = 0; i < current.length; i += 2) {
+          round.push({ p1: current[i], p2: current[i + 1] || null });
+        }
+        rounds.push(round);
+        current = round.map(() => null);
+      }
+
+      const ins = await env.DB.prepare(
+        `INSERT INTO brackets (event_id, draw_id, title, players, rounds, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).bind(
+        eventId,
+        latestDraw.id,
+        "淘汰賽",
+        JSON.stringify(players),
+        JSON.stringify(rounds),
+        nowIso()
+      ).run();
+
+      return json({
+        ok: true,
+        bracket_id: ins.meta.last_row_id,
+        players,
+        byes,
+        rounds,
+      });
+    }
 
     return error("API 不存在", 404);
   } catch (e) {
